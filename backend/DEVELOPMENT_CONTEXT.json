@@ -1,0 +1,179 @@
+{
+  "project": "InclusiveEdu",
+  "description": "Educational accessibility platform: real-time audio transcription + screenshot explanation broadcast via WebSocket",
+  "branch": "feature/backend-ai-accessibility",
+  "lastCommit": "4c770c4 (pushed to origin)",
+
+  "backend": {
+    "root": "backend/",
+    "python": "3.12",
+    "framework": "FastAPI + Uvicorn",
+    "dependencies": [
+      "fastapi", "uvicorn", "pydantic-settings", "httpx", "python-multipart", "websockets"
+    ],
+    "install": "pip install -r requirements.txt",
+    "run": "uvicorn main:app --reload --port 8000",
+
+    "architecture": {
+      "pattern": "Clean Architecture (ports/adapters)",
+      "layers": {
+        "domain/ports": {
+          "path": "app/domain/ports/",
+          "files": ["stt.py", "vision.py", "realtime.py", "repository.py"],
+          "role": "Abstract interfaces (protocols) for each external dependency"
+        },
+        "application": {
+          "use_cases": {
+            "path": "app/application/use_cases/",
+            "files": [
+              {"name": "ingest_audio.py", "calls": "STTProvider + ClassroomRepository + RealtimePublisher"},
+              {"name": "ingest_screenshot.py", "calls": "DeduplicationService + VisionProvider + ClassroomRepository + RealtimePublisher"},
+              {"name": "join_classroom.py", "calls": "ClassroomRepository + RealtimePublisher"},
+              {"name": "get_classroom_state.py", "calls": "ClassroomRepository"}
+            ]
+          },
+          "services": {
+            "path": "app/application/services/",
+            "files": [
+              {"name": "deduplication.py", "role": "Perceptual hash (dHash) + in-memory LRU cache to avoid re-sending identical screenshots to the AI"}
+            ]
+          }
+        },
+        "infrastructure": {
+          "providers": {
+            "groq": {
+              "stt": {
+                "file": "app/infrastructure/providers/groq/stt.py",
+                "model": "whisper-large-v3-turbo",
+                "note": "Uses httpx.AsyncClient to POST multipart to Groq API. Filename MUST include .wav extension (Groq inspects extension, not content-type)"
+              },
+              "vision": {
+                "file": "app/infrastructure/providers/groq/vision.py",
+                "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+                "note": "Groq requires image dimensions >= 2x2 pixels. 1x1 PNG returns 400"
+              }
+            },
+            "gcp_placeholder": {
+              "path": "app/infrastructure/providers/gcp_placeholder/",
+              "status": "PLACEHOLDER — ready to implement Google Cloud STT + Vision API"
+            }
+          },
+          "repositories": {
+            "in_memory": {
+              "file": "app/infrastructure/repositories/in_memory_classroom_repository.py",
+              "data": "dict[classroom_id, ClassroomState]",
+              "limitation": "Data lost on server restart. Swap to a DB-backed repository for production"
+            }
+          },
+          "realtime": {
+            "in_memory": {
+              "file": "app/infrastructure/realtime/in_memory_realtime_publisher.py",
+              "note": "Delegates to ConnectionManager.broadcast(). Swap to Redis pub/sub for horizontal scaling"
+            }
+          }
+        },
+        "presentation": {
+          "api_routes": {
+            "path": "app/presentation/api/routes/",
+            "endpoints": [
+              {"method": "GET", "path": "/health", "file": "health.py"},
+              {"method": "POST", "path": "/api/v1/classrooms/{classroom_id}/join", "file": "classrooms.py", "body": "{\"userId\": string, \"role\": \"teacher\"|\"student\"}"},
+              {"method": "GET",  "path": "/api/v1/classrooms/{classroom_id}/state", "file": "classrooms.py"},
+              {"method": "POST", "path": "/api/v1/classrooms/{classroom_id}/audio", "file": "audio.py", "body": "multipart/form-data with field 'file' (WAV)"},
+              {"method": "POST", "path": "/api/v1/classrooms/{classroom_id}/screenshots", "file": "screenshots.py", "body": "multipart/form-data with field 'file' (PNG)"}
+            ]
+          },
+          "websocket": {
+            "path": "app/presentation/websockets/",
+            "endpoint": "ws://localhost:8000/ws/classrooms/{classroom_id}",
+            "connection_manager": "Per-room dict of WebSocket connections with dead-connection cleanup on send failure",
+            "events_sent": ["transcript.final", "screenshot.processed"]
+          },
+          "dependencies": {
+            "file": "app/presentation/api/dependencies.py",
+            "role": "FastAPI dependency that fetches the global Container singleton"
+          }
+        },
+        "core": {
+          "config": {
+            "file": "app/core/config.py",
+            "class": "Settings(BaseSettings)",
+            "env_prefix": "none (reads directly from .env)",
+            "key_vars": [
+              "GROQ_API_KEY", "GROQ_BASE_URL", "GROQ_STT_MODEL", "GROQ_VISION_MODEL",
+              "STT_PROVIDER", "VISION_PROVIDER", "API_PREFIX", "APP_ENV"
+            ]
+          },
+          "container": {
+            "file": "app/core/container.py",
+            "class": "Container",
+            "role": "Wires all dependencies: Settings → Providers → UseCases → single DI entrypoint",
+            "singleton": "get_container() → global Container instance"
+          }
+        },
+        "schemas": {
+          "api.py": "JoinRequest, StateResponse (with field aliases: userId, classroomId, etc.)",
+          "events.py": "EventEnvelope for WebSocket messages"
+        }
+      }
+    },
+
+    "test": {
+      "file": "test_e2e.py",
+      "run_basic": "python test_e2e.py",
+      "run_ai": "python test_e2e.py --with-ai",
+      "requires": "httpx + websockets (both in requirements.txt)",
+      "coverage": "12 tests — health, join, state, audio STT, screenshot vision, dedup, WebSocket receipt",
+      "status": "12/12 PASSING (verified with real Groq API key)"
+    },
+
+    "known_issues": {
+      "audio_filename_extension": "FIXED — filename changed from 'audio' to 'audio.wav' in stt.py:20. Groq inspects extension, not content-type",
+      "vision_model_id": "FIXED — model changed from 'qwen-3.6-27b' → 'qwen/qwen3.6-27b' → 'meta-llama/llama-4-scout-17b-16e-instruct' in config.py:15 and .env",
+      "png_min_dimensions": "FIXED — Groq requires >= 2x2 pixels. make_minimal_png() now generates 4x4",
+      "in_memory_data_loss": "UNFIXED — restarting the server clears all classrooms. Expected for MVP",
+      "no_auth": "UNFIXED — no authentication/authorization. All endpoints are public"
+    },
+
+    "next_steps": [
+      "Add authentication (JWT or session-based)",
+      "Replace in-memory repository with PostgreSQL/SQLite (maybe SQLAlchemy + Alembic)",
+      "Replace in-memory realtime publisher with Redis pub/sub for multi-process scaling",
+      "Implement GCP provider (google-cloud-speech + google-cloud-vision)",
+      "Add health check dependencies (DB ping, provider health)",
+      "Add structured logging (structlog or loguru)",
+      "Add rate limiting and request validation",
+      "Containerize with Docker",
+      "CI/CD pipeline (lint → test → build)"
+    ]
+  },
+
+  "frontend": {
+    "root": "inclusiveEdu/",
+    "tech_stack": "React 19, TypeScript, Vite, Tailwind CSS 4, react-router-dom v7",
+    "package_manager": "pnpm",
+    "run": "pnpm dev",
+    "build": "pnpm build",
+    "key_structure": {
+      "pages": ["HomePage", "TeacherPage", "DeafStudentPage", "BlindStudentPage"],
+      "api_client": "lib/api/ — fetch wrapper targeting VITE_API_URL (default http://localhost:8000)",
+      "websocket": "lib/ws/classroomSocket.ts — singleton ClassroomSocket, connects to VITE_WS_URL/classrooms/{id}/events",
+      "demo_mode": "lib/demo/classroomDemo.ts — offline fallback without backend",
+      "routing": "BrowserRouter with 4 routes, wrapped in AppProviders (ToastProvider + ClassroomProvider)"
+    },
+    "env_vars": ["VITE_API_URL", "VITE_WS_URL"],
+    "integration_points": [
+      "apiRequest<T>() in lib/api/ — connect to backend REST endpoints",
+      "classroomSocket in lib/ws/ — connect to backend WebSocket at ws://localhost:8000/ws/classrooms/{id}",
+      "Backend events (transcript.final, screenshot.processed) are consumed in ClassroomProvider"
+    ],
+    "status": "Functional with demo data. Requires backend running for full integration. 4 pages implemented (teacher, deaf student, blind student, home)."
+  },
+
+  "team_handoff": {
+    "backend_dev": "Run 'uvicorn main:app --reload --port 8000', ensure GROQ_API_KEY is in .env, test with 'python test_e2e.py --with-ai'",
+    "frontend_dev": "Run 'pnpm dev', ensure VITE_API_URL=http://localhost:8000 in .env, connect to backend for live data",
+    "full_integration_test": "Start backend → Start frontend → Open /teacher → Join classroom → Upload audio/screenshots → Verify WebSocket events appear on student pages",
+    "git_workflow": "Branch feature/backend-ai-accessibility has all backend changes. Frontend is on feature/board-camera-support. Merge when both are stable."
+  }
+}

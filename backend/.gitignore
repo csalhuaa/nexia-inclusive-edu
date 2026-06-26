@@ -1,0 +1,36 @@
+# === Python Cache ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# === Environments & Package Managers ===
+.venv/
+venv/
+ENV/
+env/
+.env
+.flaskenv
+
+# === Database (SQLite & Migrations) ===
+*.db
+*.sqlite3
+# Keep migrations folder structural integrity, but ignore compiled files
+**/migrations/__pycache__/
+
+# === Testing & Coverage ===
+.pytest_cache/
+.coverage
+htmlcov/
+flake8
+
+# === IDEs and Editors ===
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# === Logs & Runtime ===
+*.log
+logs/
