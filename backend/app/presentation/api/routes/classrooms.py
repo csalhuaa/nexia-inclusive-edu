@@ -51,9 +51,8 @@ def _session_response(state: ClassroomState, role: str | None = None) -> dict:
             "boardCamera": role == "teacher",
         },
         "subtitles": [],
-        "currentCaption": state.latest_screen_explanation
-        or state.latest_transcript
-        or "",
+        "currentCaption": state.latest_screen_explanation or state.latest_transcript or "",
+        "currentFullText": state.latest_screen_full_text or "",
         "interpreterActive": True,
         "connectionMode": "api",
         "subtitleSpeed": 1,
@@ -116,4 +115,5 @@ async def get_classroom_state(
         ],
         latest_transcript=state.latest_transcript,
         latest_screen_explanation=state.latest_screen_explanation,
+        latest_screen_full_text=state.latest_screen_full_text,
     )

@@ -27,7 +27,7 @@ class IngestScreenshotUseCase:
 
     async def execute(
         self, classroom_id: str, image_data: bytes, force: bool = False
-    ) -> str | None:
+    ) -> dict[str, str] | None:
         image_hash = self._dedup.hash_image(image_data)
 
         last_hash = await self._repo.get_latest_screenshot_hash(classroom_id)
@@ -41,11 +41,11 @@ class IngestScreenshotUseCase:
             if not force and now - last_analysis_at < self._min_interval_seconds:
                 return None
 
-            explanation = await self._vision.explain_screenshot(image_data)
+            explanation_dict = await self._vision.explain_screenshot(image_data)
 
             self._last_analysis_at[classroom_id] = time.monotonic()
 
-        await self._repo.update_screen_explanation(classroom_id, explanation)
+        await self._repo.update_screen_explanation(classroom_id, explanation_dict["summary"], explanation_dict["full_text"])
         await self._repo.set_latest_screenshot_hash(classroom_id, image_hash)
 
         await self._publisher.publish(
@@ -54,8 +54,11 @@ class IngestScreenshotUseCase:
                 type="screenshot.processed",
                 classroom_id=classroom_id,
                 timestamp=now_utc(),
-                payload={"explanation": explanation},
+                payload={
+                    "explanation": explanation_dict["summary"],
+                    "full_text": explanation_dict["full_text"]
+                },
             ),
         )
 
-        return explanation
+        return explanation_dict

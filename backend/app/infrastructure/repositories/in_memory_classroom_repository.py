@@ -51,10 +51,11 @@ class InMemoryClassroomRepository(ClassroomRepository):
         room.latest_transcript = transcript
 
     async def update_screen_explanation(
-        self, classroom_id: str, explanation: str
+        self, classroom_id: str, explanation: str, full_text: str = ""
     ) -> None:
         room = self._ensure(classroom_id)
         room.latest_screen_explanation = explanation
+        room.latest_screen_full_text = full_text
 
     async def get_state(self, classroom_id: str) -> ClassroomState:
         return self._ensure(classroom_id)

@@ -15,6 +15,7 @@ class ClassroomState:
     participants: list[ParticipantInfo] = field(default_factory=list)
     latest_transcript: str | None = None
     latest_screen_explanation: str | None = None
+    latest_screen_full_text: str | None = None
     latest_screenshot_hash: str | None = None
 
 
@@ -42,7 +43,7 @@ class ClassroomRepository(ABC):
 
     @abstractmethod
     async def update_screen_explanation(
-        self, classroom_id: str, explanation: str
+        self, classroom_id: str, explanation: str, full_text: str = ""
     ) -> None: ...
 
     @abstractmethod

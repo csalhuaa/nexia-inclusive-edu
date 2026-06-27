@@ -21,5 +21,6 @@ class StateResponse(BaseModel):
     participants: list[dict]
     latest_transcript: str | None = Field(alias="latestTranscript", default=None)
     latest_screen_explanation: str | None = Field(alias="latestScreenExplanation", default=None)
+    latest_screen_full_text: str | None = Field(alias="latestScreenFullText", default=None)
 
     model_config = {"populate_by_name": True}
