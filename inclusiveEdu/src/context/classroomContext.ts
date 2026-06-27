@@ -23,6 +23,7 @@ export type ClassroomContextValue = {
   speakCaption: () => void;
   enableTeacherAudio: () => void;
   teacherAudioBlocked: boolean;
+  teacherIsSpeaking: boolean;
   latestSignGloss: SignGlossPayload | null;
   setSignGloss: (payload: SignGlossPayload) => void;
   downloadSummary: () => void;

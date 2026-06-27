@@ -26,6 +26,8 @@ export function ClassControlsBar() {
   const uploadInFlightRef = useRef(false);
   const sttChunksRef = useRef<Blob[]>([]);
   const segmentHadVoiceRef = useRef(false);
+  const lastSpeakingSignalAtRef = useRef(0);
+  const wasSpeakingRef = useRef(false);
   const [voiceLevel, setVoiceLevel] = useState(0);
 
   const sessionId = session?.id;
@@ -63,9 +65,22 @@ export function ClassControlsBar() {
           analyser.getByteFrequencyData(samples);
           const average = samples.reduce((total, value) => total + value, 0) / samples.length;
           const nextLevel = Math.min(1, average / 72);
-          if (nextLevel > VOICE_ACTIVITY_THRESHOLD) {
+          const isSpeakingNow = nextLevel > VOICE_ACTIVITY_THRESHOLD;
+          if (isSpeakingNow) {
             segmentHadVoiceRef.current = true;
           }
+
+          const now = Date.now();
+          if (isSpeakingNow && now - lastSpeakingSignalAtRef.current > 900) {
+            lastSpeakingSignalAtRef.current = now;
+            wasSpeakingRef.current = true;
+            classroomSocket.send({ type: "teacher_speaking", payload: { active: true } });
+          }
+          if (!isSpeakingNow && wasSpeakingRef.current && now - lastSpeakingSignalAtRef.current > 1800) {
+            wasSpeakingRef.current = false;
+            classroomSocket.send({ type: "teacher_speaking", payload: { active: false } });
+          }
+
           setVoiceLevel(nextLevel);
           analyserFrameRef.current = requestAnimationFrame(readLevel);
         };
@@ -177,6 +192,9 @@ export function ClassControlsBar() {
       void audioContextRef.current?.close();
       audioContextRef.current = null;
       segmentHadVoiceRef.current = false;
+      wasSpeakingRef.current = false;
+      lastSpeakingSignalAtRef.current = 0;
+      classroomSocket.send({ type: "teacher_speaking", payload: { active: false } });
       setVoiceLevel(0);
       if (recorderRef.current?.state === "recording") {
         recorderRef.current.stop();

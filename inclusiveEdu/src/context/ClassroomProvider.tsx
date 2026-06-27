@@ -133,6 +133,7 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
   const [apiAvailable, setApiAvailable] = useState<boolean | null>(null);
   const [isRecordingQuestion, setIsRecordingQuestion] = useState(false);
   const [teacherAudioBlocked, setTeacherAudioBlocked] = useState(false);
+  const [teacherIsSpeaking, setTeacherIsSpeaking] = useState(false);
   const [latestSignGloss, setLatestSignGloss] = useState<SignGlossPayload | null>(null);
   const [latestScreenFrame, setLatestScreenFrame] = useState<ScreenFramePayload | null>(null);
 
@@ -143,6 +144,7 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
   const lastNarrationAtRef = useRef(0);
   const pendingNarrationRef = useRef<string | null>(null);
   const narrationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const teacherSpeakingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     sessionRef.current = session;
@@ -210,6 +212,24 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
     setLatestSignGloss(payload);
   }, []);
 
+  const markTeacherSpeaking = useCallback((active = true) => {
+    if (teacherSpeakingTimerRef.current) {
+      clearTimeout(teacherSpeakingTimerRef.current);
+      teacherSpeakingTimerRef.current = null;
+    }
+
+    if (!active) {
+      setTeacherIsSpeaking(false);
+      return;
+    }
+
+    setTeacherIsSpeaking(true);
+    teacherSpeakingTimerRef.current = setTimeout(() => {
+      setTeacherIsSpeaking(false);
+      teacherSpeakingTimerRef.current = null;
+    }, 2000);
+  }, []);
+
   const speakNow = useCallback((text: string, interrupt = false) => {
     if (!text || !("speechSynthesis" in window)) return;
     const spokenText = sanitizeNarrationText(text);
@@ -261,6 +281,14 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
   useEffect(() => {
     return () => stopNarration();
   }, [stopNarration]);
+
+  useEffect(() => {
+    return () => {
+      if (teacherSpeakingTimerRef.current) {
+        clearTimeout(teacherSpeakingTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (session?.status === "ended") {
@@ -324,14 +352,19 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
 	        (event) => {
 	          void handleRtcEvent(event, sessionRef.current?.role ?? null);
 	          if (event.type === "subtitle") {
+              markTeacherSpeaking(true);
 	            pushSubtitle(event.payload.text, event.payload.isFinal);
 	            if (sessionRef.current?.role === "deaf-student") {
 	              setLatestSignGloss(buildSimulatedSignGloss(event.payload.text));
 	            }
 	          }
 	          if (event.type === "sign_gloss") {
+              markTeacherSpeaking(true);
 	            setLatestSignGloss(event.payload);
 	          }
+          if (event.type === "teacher_speaking") {
+            markTeacherSpeaking(event.payload.active);
+          }
           if (event.type === "caption") {
             setCaption(event.payload);
             if (sessionRef.current?.role === "blind-student") {
@@ -367,7 +400,7 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
         () => toast("Conexión en tiempo real interrumpida", "error"),
       );
     },
-    [pushSubtitle, queueBoardNarration, setCaption, toast],
+    [markTeacherSpeaking, pushSubtitle, queueBoardNarration, setCaption, toast],
   );
 
   useEffect(() => {
@@ -561,6 +594,7 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
       speakCaption,
       enableTeacherAudio,
       teacherAudioBlocked,
+      teacherIsSpeaking,
       latestSignGloss,
       setSignGloss,
       downloadSummary,
@@ -585,6 +619,7 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
       speakCaption,
       enableTeacherAudio,
       teacherAudioBlocked,
+      teacherIsSpeaking,
       latestSignGloss,
       setSignGloss,
       downloadSummary,
