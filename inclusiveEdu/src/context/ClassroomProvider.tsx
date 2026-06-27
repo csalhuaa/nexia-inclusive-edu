@@ -21,6 +21,7 @@ import {
   announceStudentAudioReady,
   enableStudentAudio,
   handleRtcEvent,
+  isTeacherAudioActive,
   setAudioBlockedHandler,
   stopStudentAudio,
 } from "@/lib/rtc/audioBridge";
@@ -221,6 +222,7 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
     utterance.lang = "es-PE";
     utterance.voice = getSpanishVoice();
     utterance.rate = sessionRef.current?.subtitleSpeed ?? 1;
+    utterance.volume = isTeacherAudioActive() ? 0.55 : 0.92;
     window.speechSynthesis.speak(utterance);
     lastNarrationAtRef.current = Date.now();
   }, []);
@@ -266,6 +268,8 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
     }
     if (session?.role !== "blind-student") {
       stopNarration();
+    }
+    if (session?.role !== "blind-student" && session?.role !== "deaf-student") {
       stopTeacherAudio();
     }
     if (session?.status === "ended") {
@@ -274,7 +278,10 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
   }, [session?.role, session?.status, stopNarration, stopTeacherAudio]);
 
   useEffect(() => {
-    if (session?.role === "blind-student" && session.status === "live") {
+    if (
+      (session?.role === "blind-student" || session?.role === "deaf-student") &&
+      session.status === "live"
+    ) {
       announceStudentAudioReady();
       const cleanup = classroomSocket.onOpen(() => announceStudentAudioReady());
       const retry = window.setInterval(() => announceStudentAudioReady(), 3000);

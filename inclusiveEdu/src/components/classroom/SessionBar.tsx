@@ -1,16 +1,19 @@
 import { useClassroom } from "@/hooks/useClassroom";
+import { useToast } from "@/hooks/useToast";
 import { ConnectionBadge } from "@/components/classroom/ConnectionBadge";
 import { Icon } from "@/components/ui/Icon";
 import { StatusChip } from "@/components/ui/StatusChip";
 
 export function SessionBar() {
   const { session } = useClassroom();
+  const { showToast } = useToast();
 
   if (!session) return null;
 
   const slide = session.slides[session.slideIndex];
   const copyCode = async () => {
     await navigator.clipboard.writeText(session.code);
+    showToast(`Código ${session.code} copiado`, "success");
   };
 
   return (

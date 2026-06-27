@@ -1,21 +1,32 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/Button";
 import { MediaToggle } from "@/components/classroom/SessionWidgets";
 import { useClassroom } from "@/hooks/useClassroom";
+import { useToast } from "@/hooks/useToast";
 import { ROUTES } from "@/constants/routes";
 import { Icon } from "@/components/ui/Icon";
 import { uploadAudio } from "@/lib/api/classroom";
 import { setTeacherAudioStream } from "@/lib/rtc/audioBridge";
+import { classroomSocket } from "@/lib/ws/classroomSocket";
+
+const STT_SEGMENT_MS = 4500;
+const MIN_STT_BLOB_BYTES = 12_000;
+const VOICE_ACTIVITY_THRESHOLD = 0.08;
 
 export function ClassControlsBar() {
-  const { session, toggleMedia, toggleBoardCamera, endSession } = useClassroom();
+  const { session, toggleMedia, toggleBoardCamera, endSession, pushSubtitle } = useClassroom();
+  const { showToast } = useToast();
   const navigate = useNavigate();
   const micStreamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserFrameRef = useRef<number | null>(null);
+  const segmentTimerRef = useRef<number | null>(null);
   const uploadInFlightRef = useRef(false);
   const sttChunksRef = useRef<Blob[]>([]);
-  const lastSttUploadAtRef = useRef(0);
+  const segmentHadVoiceRef = useRef(false);
+  const [voiceLevel, setVoiceLevel] = useState(0);
 
   const sessionId = session?.id;
   const isTeacherApiSession =
@@ -27,6 +38,7 @@ export function ClassControlsBar() {
     const activeSessionId = sessionId;
 
     let cancelled = false;
+    let shouldContinueRecording = false;
 
     async function startMicrophone() {
       if (!audioEnabled || recorderRef.current) return;
@@ -39,35 +51,112 @@ export function ClassControlsBar() {
 
         micStreamRef.current = stream;
         setTeacherAudioStream(stream);
+        const audioContext = new AudioContext();
+        const source = audioContext.createMediaStreamSource(stream);
+        const analyser = audioContext.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+        audioContextRef.current = audioContext;
+        const samples = new Uint8Array(analyser.frequencyBinCount);
+
+        const readLevel = () => {
+          analyser.getByteFrequencyData(samples);
+          const average = samples.reduce((total, value) => total + value, 0) / samples.length;
+          const nextLevel = Math.min(1, average / 72);
+          if (nextLevel > VOICE_ACTIVITY_THRESHOLD) {
+            segmentHadVoiceRef.current = true;
+          }
+          setVoiceLevel(nextLevel);
+          analyserFrameRef.current = requestAnimationFrame(readLevel);
+        };
+        readLevel();
+
         const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
           ? "audio/webm;codecs=opus"
           : "audio/webm";
-        const recorder = new MediaRecorder(stream, { mimeType });
 
-        recorder.ondataavailable = (event) => {
-          if (!event.data.size) return;
-
-          sttChunksRef.current.push(event.data);
-          const now = Date.now();
-          if (now - lastSttUploadAtRef.current < 5000 || uploadInFlightRef.current) return;
-
-          const sttBlob = new Blob(sttChunksRef.current, { type: event.data.type || mimeType });
-          sttChunksRef.current = [];
-          lastSttUploadAtRef.current = now;
-          uploadInFlightRef.current = true;
-          uploadAudio(activeSessionId, sttBlob).then((result) => {
-            if (!result.transcript) {
-              console.warn("[STT] Transcripción vacía (silencio?)");
-            }
-          }).catch((err) => {
-            console.error("[STT] Error al subir audio:", err);
-          }).finally(() => {
-            uploadInFlightRef.current = false;
+        const publishTranscript = (text: string) => {
+          pushSubtitle(text);
+          classroomSocket.send({
+            type: "subtitle",
+            payload: {
+              id: crypto.randomUUID(),
+              text,
+              timestamp: Date.now(),
+              isFinal: true,
+            },
           });
         };
 
-        recorder.start(750);
-        recorderRef.current = recorder;
+        const uploadSegment = (blob: Blob) => {
+          if (uploadInFlightRef.current) {
+            console.info("[STT] Segmento omitido: hay otra transcripción en curso");
+            return;
+          }
+
+          uploadInFlightRef.current = true;
+          uploadAudio(activeSessionId, blob)
+            .then((result) => {
+              if (!result.transcript) {
+                console.warn("[STT] Sin transcripción útil", result);
+                return;
+              }
+              publishTranscript(result.transcript);
+            })
+            .catch((err) => {
+              console.error("[STT] Error al subir audio:", err);
+            })
+            .finally(() => {
+              uploadInFlightRef.current = false;
+            });
+        };
+
+        const startSegment = () => {
+          if (cancelled || !shouldContinueRecording || !micStreamRef.current) return;
+          if (!micStreamRef.current.getAudioTracks().some((track) => track.readyState === "live")) {
+            return;
+          }
+
+          sttChunksRef.current = [];
+          segmentHadVoiceRef.current = false;
+          const recorder = new MediaRecorder(micStreamRef.current, { mimeType });
+          recorderRef.current = recorder;
+
+          recorder.ondataavailable = (event) => {
+            if (event.data.size) {
+              sttChunksRef.current.push(event.data);
+            }
+          };
+
+          recorder.onstop = () => {
+            const blob = new Blob(sttChunksRef.current, { type: mimeType });
+            sttChunksRef.current = [];
+            recorderRef.current = null;
+
+            const hasEnoughAudio = blob.size >= MIN_STT_BLOB_BYTES || segmentHadVoiceRef.current;
+            if (hasEnoughAudio) {
+              uploadSegment(blob);
+            } else {
+              console.info("[STT] Segmento omitido: silencio o audio demasiado corto", {
+                bytes: blob.size,
+              });
+            }
+
+            if (!cancelled && shouldContinueRecording) {
+              window.setTimeout(startSegment, 250);
+            }
+          };
+
+          recorder.start();
+          segmentTimerRef.current = window.setTimeout(() => {
+            if (recorder.state === "recording") {
+              recorder.stop();
+            }
+          }, STT_SEGMENT_MS);
+        };
+
+        shouldContinueRecording = true;
+        startSegment();
       } catch {
         if (audioEnabled) {
           toggleMedia("audio");
@@ -76,7 +165,22 @@ export function ClassControlsBar() {
     }
 
     function stopMicrophone() {
-      recorderRef.current?.stop();
+      shouldContinueRecording = false;
+      if (analyserFrameRef.current) {
+        cancelAnimationFrame(analyserFrameRef.current);
+        analyserFrameRef.current = null;
+      }
+      if (segmentTimerRef.current) {
+        window.clearTimeout(segmentTimerRef.current);
+        segmentTimerRef.current = null;
+      }
+      void audioContextRef.current?.close();
+      audioContextRef.current = null;
+      segmentHadVoiceRef.current = false;
+      setVoiceLevel(0);
+      if (recorderRef.current?.state === "recording") {
+        recorderRef.current.stop();
+      }
       recorderRef.current = null;
       sttChunksRef.current = [];
       micStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -94,7 +198,7 @@ export function ClassControlsBar() {
       cancelled = true;
       stopMicrophone();
     };
-  }, [audioEnabled, isTeacherApiSession, sessionId, toggleMedia]);
+  }, [audioEnabled, isTeacherApiSession, pushSubtitle, sessionId, toggleMedia]);
 
   if (!session) return null;
 
@@ -105,6 +209,7 @@ export function ClassControlsBar() {
 
   const copyCode = async () => {
     await navigator.clipboard.writeText(session.code);
+    showToast(`Código ${session.code} copiado`, "success");
   };
 
   return (
@@ -117,6 +222,20 @@ export function ClassControlsBar() {
           active={session.media.audio}
           onClick={() => toggleMedia("audio")}
         />
+        {session.media.audio && (
+          <div
+            className="teacher-mic-meter"
+            aria-label={voiceLevel > 0.14 ? "El docente está hablando" : "Micrófono activo"}
+            title={voiceLevel > 0.14 ? "El docente está hablando" : "Micrófono activo"}
+          >
+            <span className="teacher-mic-dot" />
+            <span className="teacher-mic-bars" style={{ "--voice-level": voiceLevel } as CSSProperties}>
+              {Array.from({ length: 5 }).map((_, index) => (
+                <i key={index} />
+              ))}
+            </span>
+          </div>
+        )}
         <MediaToggle
           icon="videocam"
           offIcon="videocam_off"
