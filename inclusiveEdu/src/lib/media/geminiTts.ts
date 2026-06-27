@@ -4,9 +4,10 @@ import { env } from "@/config/env";
 let audioContext: AudioContext | null = null;
 let currentSource: AudioBufferSourceNode | null = null;
 
-// Caché del último audio generado para no llamar a la API si el texto es el mismo
-let cachedText: string | null = null;
-let cachedAudioBuffer: AudioBuffer | null = null;
+// Caché de los últimos audios generados (soporta hasta 10 para evitar fugas de memoria).
+// Así permitimos que el resumen y el texto completo convivan en memoria al mismo tiempo.
+const audioCache = new Map<string, AudioBuffer>();
+const MAX_CACHE_SIZE = 10;
 
 export async function playGeminiTts(text: string): Promise<void> {
   if (!env.geminiApiKey) {
@@ -24,10 +25,11 @@ export async function playGeminiTts(text: string): Promise<void> {
   // Detener cualquier audio reproduciéndose
   stopGeminiTts();
 
-  // Si el texto solicitado es idéntico al último, reproducimos el audio cacheado directamente
-  if (text === cachedText && cachedAudioBuffer) {
+  // Si el texto solicitado ya está en caché, lo usamos directamente
+  if (audioCache.has(text)) {
+    const cachedBuffer = audioCache.get(text)!;
     currentSource = audioContext.createBufferSource();
-    currentSource.buffer = cachedAudioBuffer;
+    currentSource.buffer = cachedBuffer;
     currentSource.connect(audioContext.destination);
     currentSource.start(0);
     return;
@@ -69,9 +71,12 @@ export async function playGeminiTts(text: string): Promise<void> {
   const wavBuffer = createWavHeader(pcmBytes, 24000);
   const audioBuffer = await audioContext.decodeAudioData(wavBuffer);
   
-  // Guardamos en caché
-  cachedText = text;
-  cachedAudioBuffer = audioBuffer;
+  // Guardamos en caché y evitamos sobrepasar el límite
+  if (audioCache.size >= MAX_CACHE_SIZE) {
+    const firstKey = audioCache.keys().next().value;
+    if (firstKey) audioCache.delete(firstKey);
+  }
+  audioCache.set(text, audioBuffer);
 
   currentSource = audioContext.createBufferSource();
   currentSource.buffer = audioBuffer;
