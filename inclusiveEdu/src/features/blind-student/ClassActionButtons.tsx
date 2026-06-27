@@ -5,6 +5,10 @@ import { cn } from "@/lib/cn";
 export function ClassActionButtons() {
   const {
     speakCaption,
+    speakFullText,
+    stopSpeaking,
+    toggleTeacherAudio,
+    isTeacherAudioMuted,
     downloadSummary,
     isRecordingQuestion,
     toggleQuestionRecording,
@@ -13,19 +17,44 @@ export function ClassActionButtons() {
 
   const actions = [
     {
-      id: "replay",
-      label: "Repetir último audio",
-      icon: "replay",
-      ariaLabel: "Repetir último audio",
-      variant: "default" as const,
+      id: "summary",
+      label: "¿Qué hay en la pizarra?",
+      icon: "visibility",
+      ariaLabel: "Resumir lo que hay en la pizarra",
+      variant: "primary" as const,
       onClick: speakCaption,
     },
     {
+      id: "dictate",
+      label: "Dictar toda la diapositiva",
+      icon: "record_voice_over",
+      ariaLabel: "Dictar todo el texto de la diapositiva",
+      variant: "primary" as const,
+      onClick: speakFullText,
+    },
+    {
+      id: "stop",
+      label: "Detener lectura",
+      icon: "volume_off",
+      ariaLabel: "Detener lectura en voz alta",
+      variant: "default" as const,
+      onClick: stopSpeaking,
+    },
+    {
+      id: "mute-teacher",
+      label: isTeacherAudioMuted ? "Escuchar clase" : "Silenciar clase",
+      icon: isTeacherAudioMuted ? "volume_up" : "volume_mute",
+      ariaLabel: isTeacherAudioMuted ? "Reactivar audio del docente" : "Silenciar audio del docente",
+      variant: "default" as const,
+      onClick: toggleTeacherAudio,
+      active: isTeacherAudioMuted,
+    },
+    {
       id: "ask",
-      label: isRecordingQuestion ? "Grabando…" : "Hacer pregunta al docente",
+      label: isRecordingQuestion ? "Grabando…" : "Pregunta por voz",
       icon: isRecordingQuestion ? "stop_circle" : "mic",
       ariaLabel: "Hacer pregunta al docente por voz",
-      variant: "primary" as const,
+      variant: "default" as const,
       onClick: toggleQuestionRecording,
       active: isRecordingQuestion,
     },
@@ -43,7 +72,7 @@ export function ClassActionButtons() {
   return (
     <section
       aria-label="Acciones de la clase"
-      className="grid w-full max-w-4xl grid-cols-1 gap-6 md:grid-cols-3"
+      className="grid w-full max-w-5xl grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3"
     >
       {actions.map((action) => {
         const isPrimary = action.variant === "primary";

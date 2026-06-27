@@ -25,7 +25,9 @@ import {
   setAudioBlockedHandler,
   stopTeacherAudioBroadcast,
   stopStudentAudio,
+  setStudentAudioMuted,
 } from "@/lib/rtc/audioBridge";
+import { playGeminiTts, stopGeminiTts } from "@/lib/media/geminiTts";
 import { stopAllClassroomMedia } from "@/lib/media/classroomMedia";
 import type {
   ClassroomSession,
@@ -109,13 +111,15 @@ function normalizeText(value: string): string {
 }
 
 function buildSimulatedSignGloss(text: string): SignGlossPayload {
+  const stopWords = new Set(["el", "la", "los", "las", "un", "una", "unos", "unas", "de", "del", "a", "al", "en", "por", "para", "con", "sin", "su", "sus", "tu", "tus", "mi", "mis", "es", "son", "y", "o", "u", "e", "que", "como"]);
   const words = normalizeText(text)
     .replace(/[^\w\s]/g, " ")
     .split(/\s+/)
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter(w => !stopWords.has(w));
+    
   const gloss = words
     .map((word) => SIGN_GLOSS_DICTIONARY[word] ?? word.toUpperCase())
-    .filter((word) => word.length > 2)
     .slice(0, 8);
 
   return {
@@ -228,6 +232,7 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
   const [apiAvailable, setApiAvailable] = useState<boolean | null>(null);
   const [isRecordingQuestion, setIsRecordingQuestion] = useState(false);
   const [teacherAudioBlocked, setTeacherAudioBlocked] = useState(false);
+  const [isTeacherAudioMuted, setIsTeacherAudioMuted] = useState(false);
   const [teacherIsSpeaking, setTeacherIsSpeaking] = useState(false);
   const [latestSignGloss, setLatestSignGloss] = useState<SignGlossPayload | null>(null);
   const [latestScreenFrame, setLatestScreenFrame] = useState<ScreenFramePayload | null>(null);
@@ -281,6 +286,15 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
     void enableStudentAudio();
   }, []);
 
+  const toggleTeacherAudio = useCallback(() => {
+    setIsTeacherAudioMuted((prev) => {
+      const next = !prev;
+      setStudentAudioMuted(next);
+      toast(next ? "Audio de la clase silenciado" : "Audio de la clase reactivado", "info");
+      return next;
+    });
+  }, [toast]);
+
   useEffect(() => {
     setAudioBlockedHandler(setTeacherAudioBlocked);
     return () => setAudioBlockedHandler(null);
@@ -296,13 +310,13 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
 
     setSession((prev) => {
       if (!prev) return prev;
-      const subtitles = [...prev.subtitles, entry].slice(-20);
+      const subtitles = [...prev.subtitles, entry].slice(-500);
       return applySessionPatch(prev, { subtitles });
     });
   }, []);
 
-  const setCaption = useCallback((text: string) => {
-    setSession((prev) => (prev ? applySessionPatch(prev, { currentCaption: text }) : prev));
+  const setCaption = useCallback((payload: { explanation: string; full_text: string }) => {
+    setSession((prev) => (prev ? applySessionPatch(prev, { currentCaption: payload.explanation, currentFullText: payload.full_text }) : prev));
   }, []);
 
   const setSignGloss = useCallback((payload: SignGlossPayload) => {
@@ -404,7 +418,7 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
 
   useEffect(() => {
     if (
-      (session?.role === "blind-student" || session?.role === "deaf-student") &&
+      session?.role === "blind-student" &&
       session.status === "live"
     ) {
       announceStudentAudioReady();
@@ -476,7 +490,7 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
         if (demoIndexRef.current % 2 === 0) {
           const caption = DEMO_CAPTIONS[captionIndexRef.current % DEMO_CAPTIONS.length];
           captionIndexRef.current += 1;
-          setCaption(caption);
+          setCaption({ explanation: caption, full_text: "Texto completo detectado en la demostración: " + caption });
         }
       }, 6000);
     },
@@ -505,11 +519,8 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
           if (event.type === "teacher_speaking") {
             markTeacherSpeaking(event.payload.active);
           }
-          if (event.type === "caption") {
+          if (event.type === "caption" || event.type === "screenshot.processed") {
             setCaption(event.payload);
-            if (sessionRef.current?.role === "blind-student") {
-              queueBoardNarration(event.payload);
-            }
           }
           if (event.type === "participant") {
             setSession((prev) => {
@@ -782,21 +793,53 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
     setSession((prev) => (prev ? applySessionPatch(prev, { subtitleSpeed: clamped }) : prev));
   }, []);
 
-  const speakCaption = useCallback(() => {
-    if (!session?.currentCaption || !("speechSynthesis" in window)) {
-      toast("Tu navegador no soporta síntesis de voz", "error");
-      return;
-    }
-    window.speechSynthesis.cancel();
+  const speakCaption = useCallback(async () => {
+    if (!session?.currentCaption) return;
     const spokenText = sanitizeNarrationText(session.currentCaption);
     if (!spokenText) return;
-    const utterance = new SpeechSynthesisUtterance(spokenText);
-    utterance.lang = "es-PE";
-    utterance.voice = getSpanishVoice();
-    utterance.rate = session.subtitleSpeed;
-    window.speechSynthesis.speak(utterance);
-    toast("Reproduciendo narración", "info");
+    try {
+      toast("Generando narración (Gemini 2.5 TTS)...", "info");
+      await playGeminiTts(spokenText);
+    } catch (err) {
+      toast("Error con Gemini TTS, usando voz del navegador", "error");
+      if ("speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(spokenText);
+        utterance.lang = "es-PE";
+        utterance.voice = getSpanishVoice();
+        utterance.rate = session.subtitleSpeed;
+        window.speechSynthesis.speak(utterance);
+      }
+    }
   }, [session, toast]);
+
+  const speakFullText = useCallback(async () => {
+    if (!session?.currentFullText) return;
+    const spokenText = sanitizeNarrationText(session.currentFullText);
+    if (!spokenText) return;
+    try {
+      toast("Generando dictado (Gemini 2.5 TTS)...", "info");
+      await playGeminiTts(spokenText);
+    } catch (err) {
+      toast("Error con Gemini TTS, usando voz del navegador", "error");
+      if ("speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(spokenText);
+        utterance.lang = "es-PE";
+        utterance.voice = getSpanishVoice();
+        utterance.rate = session.subtitleSpeed;
+        window.speechSynthesis.speak(utterance);
+      }
+    }
+  }, [session, toast]);
+
+  const stopSpeaking = useCallback(() => {
+    stopGeminiTts();
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+    toast("Lectura detenida", "info");
+  }, [toast]);
 
   const downloadSummary = useCallback(() => {
     if (!session) return;
@@ -850,7 +893,11 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
       pushSubtitle,
       setCaption,
       speakCaption,
+      speakFullText,
+      stopSpeaking,
       enableTeacherAudio,
+      toggleTeacherAudio,
+      isTeacherAudioMuted,
       teacherAudioBlocked,
       teacherIsSpeaking,
       latestSignGloss,
@@ -877,7 +924,10 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
       pushSubtitle,
       setCaption,
       speakCaption,
+      speakFullText,
       enableTeacherAudio,
+      toggleTeacherAudio,
+      isTeacherAudioMuted,
       teacherAudioBlocked,
       teacherIsSpeaking,
       latestSignGloss,

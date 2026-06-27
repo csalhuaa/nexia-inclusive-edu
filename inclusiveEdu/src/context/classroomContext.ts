@@ -21,9 +21,13 @@ export type ClassroomContextValue = {
   prevSlide: () => void;
   setSubtitleSpeed: (speed: number) => void;
   pushSubtitle: (text: string, isFinal?: boolean) => void;
-  setCaption: (text: string) => void;
+  setCaption: (payload: { explanation: string; full_text: string }) => void;
   speakCaption: () => void;
+  speakFullText: () => void;
+  stopSpeaking: () => void;
   enableTeacherAudio: () => void;
+  toggleTeacherAudio: () => void;
+  isTeacherAudioMuted: boolean;
   teacherAudioBlocked: boolean;
   teacherIsSpeaking: boolean;
   latestSignGloss: SignGlossPayload | null;

@@ -136,6 +136,12 @@ export async function enableStudentAudio() {
   announceStudentAudioReady();
 }
 
+export function setStudentAudioMuted(muted: boolean) {
+  if (remoteAudio) {
+    remoteAudio.muted = muted;
+  }
+}
+
 export function stopStudentAudio() {
   studentPeer?.close();
   studentPeer = null;
@@ -155,7 +161,7 @@ export async function handleRtcEvent(event: ClassroomEvent, role: UserRole | nul
     return;
   }
 
-  if (event.type === "webrtc_offer" && (role === "blind-student" || role === "deaf-student")) {
+  if (event.type === "webrtc_offer" && role === "blind-student") {
     if (event.payload.target && event.payload.target !== peerId) return;
     const pc = await ensureStudentPeer();
     await pc.setRemoteDescription(event.payload.description as RTCSessionDescriptionInit);
@@ -202,7 +208,7 @@ export async function handleRtcEvent(event: ClassroomEvent, role: UserRole | nul
       }
       return;
     }
-    if (role === "blind-student" || role === "deaf-student") {
+    if (role === "blind-student") {
       if (event.payload.target && event.payload.target !== peerId) return;
       if (studentPeer && studentRemoteReady) {
         await studentPeer.addIceCandidate(candidate);
