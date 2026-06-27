@@ -4,6 +4,7 @@ import { useClassroom } from "@/hooks/useClassroom";
 import { Icon } from "@/components/ui/Icon";
 import { classroomSocket } from "@/lib/ws/classroomSocket";
 import { uploadScreenshot } from "@/lib/api/classroom";
+import { registerCameraStream } from "@/lib/media/classroomMedia";
 
 type TeacherCameraPanelProps = {
   large?: boolean;
@@ -31,6 +32,7 @@ export function TeacherCameraPanel({ large = false }: TeacherCameraPanelProps) {
     if (!shouldUseCamera) {
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
+      registerCameraStream(null);
       setCameraError(false);
       return;
     }
@@ -49,6 +51,7 @@ export function TeacherCameraPanel({ large = false }: TeacherCameraPanelProps) {
         }
         streamRef.current?.getTracks().forEach((track) => track.stop());
         streamRef.current = stream;
+        registerCameraStream(stream);
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }

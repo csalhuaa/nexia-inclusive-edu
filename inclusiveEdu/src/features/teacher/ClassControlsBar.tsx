@@ -9,6 +9,7 @@ import { Icon } from "@/components/ui/Icon";
 import { uploadAudio } from "@/lib/api/classroom";
 import { setTeacherAudioStream } from "@/lib/rtc/audioBridge";
 import { classroomSocket } from "@/lib/ws/classroomSocket";
+import { registerTeacherMicStream } from "@/lib/media/classroomMedia";
 
 const STT_SEGMENT_MS = 4500;
 const MIN_STT_BLOB_BYTES = 12_000;
@@ -52,6 +53,7 @@ export function ClassControlsBar() {
         }
 
         micStreamRef.current = stream;
+        registerTeacherMicStream(stream);
         setTeacherAudioStream(stream);
         const audioContext = new AudioContext();
         const source = audioContext.createMediaStreamSource(stream);
@@ -203,6 +205,7 @@ export function ClassControlsBar() {
       sttChunksRef.current = [];
       micStreamRef.current?.getTracks().forEach((track) => track.stop());
       micStreamRef.current = null;
+      registerTeacherMicStream(null);
       setTeacherAudioStream(null);
     }
 

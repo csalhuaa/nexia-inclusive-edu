@@ -10,7 +10,9 @@ export type ParticipantAccessibility = "deaf" | "blind" | "none";
 
 export type Participant = {
   id: string;
+  clientId?: string;
   name: string;
+  displayName?: string;
   role: UserRole;
   accessibility?: ParticipantAccessibility;
   isOnline: boolean;
@@ -61,6 +63,7 @@ export type JoinClassroomPayload = {
   code: string;
   role: UserRole;
   displayName?: string;
+  clientId?: string;
 };
 
 export type CreateClassroomPayload = {
@@ -89,4 +92,5 @@ export type ClassroomEvent =
   | { type: "slide"; payload: number }
   | { type: "participant"; payload: Participant }
   | { type: "media"; payload: MediaState }
-  | { type: "session_end" };
+  | { type: "session_end" }
+  | { type: "class_ended" };

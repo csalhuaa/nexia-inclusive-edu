@@ -102,6 +102,15 @@ export function setTeacherAudioStream(stream: MediaStream | null) {
   pendingStudentPeers.clear();
 }
 
+export function stopTeacherAudioBroadcast() {
+  teacherStream?.getTracks().forEach((track) => track.stop());
+  teacherStream = null;
+  teacherPeers.forEach((pc) => pc.close());
+  teacherPeers.clear();
+  teacherIceQueue.clear();
+  pendingStudentPeers.clear();
+}
+
 export function announceStudentAudioReady() {
   console.info("[InclusiveEDU][RTC] estudiante listo para audio", { peerId });
   sendSignal("webrtc_ready", { from: peerId });

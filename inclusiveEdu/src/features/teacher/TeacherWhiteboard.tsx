@@ -6,6 +6,7 @@ import { classroomSocket } from "@/lib/ws/classroomSocket";
 import { uploadScreenshot } from "@/lib/api/classroom";
 import { TeacherCameraPanel } from "@/features/teacher/TeacherCameraPanel";
 import { AvatarVideo } from "@/features/deaf-student/components/AvatarVideo";
+import { registerScreenStream } from "@/lib/media/classroomMedia";
 
 function drawScaledFrame(videoElement: HTMLVideoElement) {
   const sourceWidth = videoElement.videoWidth || 1280;
@@ -68,6 +69,7 @@ export function TeacherWhiteboard() {
     screenWasActiveRef.current = false;
     screenStreamRef.current?.getTracks().forEach((track) => track.stop());
     screenStreamRef.current = null;
+    registerScreenStream(null);
     lastScreenSampleRef.current = null;
     firstScreenUploadPendingRef.current = false;
     rateLimitUntilRef.current = 0;
@@ -107,6 +109,7 @@ export function TeacherWhiteboard() {
 
         screenStreamRef.current?.getTracks().forEach((track) => track.stop());
         screenStreamRef.current = stream;
+        registerScreenStream(stream);
         screenWasActiveRef.current = true;
 
         if (screenVideoRef.current) {

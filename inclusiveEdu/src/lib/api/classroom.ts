@@ -29,7 +29,7 @@ export async function joinClassroom(
   return apiRequest<ClassroomSession>(API_ENDPOINTS.join(payload.code), {
     method: "POST",
     body: {
-      userId: payload.displayName || crypto.randomUUID(),
+      userId: payload.clientId || payload.displayName || crypto.randomUUID(),
       displayName: payload.displayName,
       role: roleToApi(payload.role),
     },

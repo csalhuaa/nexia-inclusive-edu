@@ -15,7 +15,7 @@ export function SessionBar() {
     new Map(
       session.participants
         .filter((participant) => participant.isOnline)
-        .map((participant) => [participant.id, participant]),
+        .map((participant) => [participant.clientId ?? participant.id, participant]),
     ).values(),
   ).length;
   const copyCode = async () => {
