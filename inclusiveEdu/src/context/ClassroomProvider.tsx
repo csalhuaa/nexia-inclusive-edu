@@ -29,6 +29,7 @@ import type {
   ClassroomSession,
   ConnectionMode,
   MediaState,
+  Participant,
   ScreenFramePayload,
   SubtitleEntry,
   UserRole,
@@ -36,6 +37,7 @@ import type {
 import type { SignGlossPayload } from "@/features/deaf-student/types/signEvents";
 
 type ToastFn = (message: string, type?: "info" | "success" | "error") => void;
+const PARTICIPANT_STALE_MS = 35_000;
 
 function applySessionPatch(
   session: ClassroomSession,
@@ -119,6 +121,35 @@ function buildSimulatedSignGloss(text: string): SignGlossPayload {
     original_text: text,
     gloss: gloss.length ? gloss : ["EXPLAIN"],
     pose: { mode: "mock_pose", frames: [] },
+  };
+}
+
+function getPresenceId() {
+  const key = "inclusiveedu.presenceId";
+  const existing = window.sessionStorage.getItem(key);
+  if (existing) return existing;
+  const next = crypto.randomUUID();
+  window.sessionStorage.setItem(key, next);
+  return next;
+}
+
+function buildParticipantPresence(session: ClassroomSession): Participant {
+  const accessibility =
+    session.role === "blind-student" ? "blind" : session.role === "deaf-student" ? "deaf" : "none";
+  const name =
+    session.role === "blind-student"
+      ? "Estudiante ciego"
+      : session.role === "deaf-student"
+        ? "Estudiante sordo"
+        : "Docente";
+
+  return {
+    id: getPresenceId(),
+    name,
+    role: session.role ?? "deaf-student",
+    accessibility,
+    isOnline: true,
+    lastSeenAt: Date.now(),
   };
 }
 
@@ -323,6 +354,43 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
     return undefined;
   }, [session?.role, session?.status]);
 
+  useEffect(() => {
+    if (!session || session.status !== "live" || session.role === "teacher") return undefined;
+
+    const sendPresence = (isOnline = true) => {
+      const participant = buildParticipantPresence(session);
+      classroomSocket.send({
+        type: "participant",
+        payload: { ...participant, isOnline, lastSeenAt: Date.now() },
+      });
+    };
+
+    sendPresence(true);
+    const timer = window.setInterval(() => sendPresence(true), 10_000);
+    return () => {
+      window.clearInterval(timer);
+      sendPresence(false);
+    };
+  }, [session]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setSession((prev) => {
+        if (!prev || prev.role !== "teacher") return prev;
+        const now = Date.now();
+        const participants = prev.participants.filter(
+          (participant) =>
+            participant.role === "teacher" ||
+            (participant.isOnline && now - (participant.lastSeenAt ?? now) < PARTICIPANT_STALE_MS),
+        );
+        return participants.length === prev.participants.length
+          ? prev
+          : applySessionPatch(prev, { participants });
+      });
+    }, 5_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   const startSimulation = useCallback(
     (mode: ConnectionMode) => {
       if (mode !== "demo") return;
@@ -374,10 +442,16 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
           if (event.type === "participant") {
             setSession((prev) => {
               if (!prev) return prev;
-              const exists = prev.participants.some((p) => p.id === event.payload.id);
+              if (!event.payload.isOnline) {
+                return applySessionPatch(prev, {
+                  participants: prev.participants.filter((p) => p.id !== event.payload.id),
+                });
+              }
+              const payload = { ...event.payload, lastSeenAt: event.payload.lastSeenAt ?? Date.now() };
+              const exists = prev.participants.some((p) => p.id === payload.id);
               const participants = exists
-                ? prev.participants.map((p) => (p.id === event.payload.id ? event.payload : p))
-                : [...prev.participants, event.payload];
+                ? prev.participants.map((p) => (p.id === payload.id ? payload : p))
+                : [...prev.participants, payload];
               return applySessionPatch(prev, { participants });
             });
           }
@@ -428,7 +502,7 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
   );
 
   const createSessionHandler = useCallback(
-    async (title = "Clase de Matemáticas") => {
+    async (title = "Sesión de hoy") => {
       setIsLoading(true);
       try {
         if (apiAvailable) {
@@ -477,7 +551,7 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
         setIsLoading(false);
       }
 
-      const demo = createDemoSession("Biología Celular — Lección 4");
+      const demo = createDemoSession("Sesión de hoy");
       activateSession({ ...demo, code: code.toUpperCase(), role }, "demo");
       toast("Modo demostración — simulación en vivo activa", "info");
       return true;

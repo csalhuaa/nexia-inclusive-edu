@@ -36,14 +36,11 @@ export function DeafStudentPage() {
         <PageLoader label="Conectando a la clase…" />
       ) : (
         <div className="flex flex-1 flex-col overflow-hidden bg-transparent">
-          <div className="flex flex-1 flex-col gap-3 overflow-hidden p-3 md:flex-row md:p-gutter">
-            <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+          <div className="flex flex-1 flex-col gap-3 overflow-hidden p-3 md:p-gutter">
+            <div className="relative flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
               <StudentWhiteboard />
-              <VisionCaptionBar />
-            </div>
-
-            <div className="shrink-0 md:w-80 md:max-h-full">
               <SignLanguagePanel />
+              <VisionCaptionBar />
             </div>
           </div>
 

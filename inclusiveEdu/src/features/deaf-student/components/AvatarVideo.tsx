@@ -6,9 +6,11 @@ const IDLE_VIDEO = "/videos/video2.mp4";
 
 type AvatarVideoProps = {
   isSpeaking: boolean;
+  className?: string;
+  compact?: boolean;
 };
 
-export function AvatarVideo({ isSpeaking }: AvatarVideoProps) {
+export function AvatarVideo({ isSpeaking, className, compact = false }: AvatarVideoProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [isFading, setIsFading] = useState(false);
   const src = isSpeaking ? SIGNING_VIDEO : IDLE_VIDEO;
@@ -30,13 +32,20 @@ export function AvatarVideo({ isSpeaking }: AvatarVideoProps) {
   }, [src]);
 
   return (
-    <div className="relative h-full w-full overflow-hidden rounded-xl bg-[#0f172a] shadow-xl">
+    <div
+      className={cn(
+        "relative h-full w-full overflow-hidden rounded-xl bg-[#0f172a] shadow-xl",
+        compact && "aspect-video min-h-[120px]",
+        className,
+      )}
+    >
       <video
         ref={videoRef}
         className={cn(
           "h-full w-full object-cover transition-opacity duration-200 ease-out",
           isFading ? "opacity-75" : "opacity-100",
         )}
+        style={{ objectPosition: compact ? "center 32%" : "center 35%" }}
         autoPlay
         muted
         loop

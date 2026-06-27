@@ -16,13 +16,20 @@ const badgeColors: Record<string, string> = {
 export function ParticipantsList() {
   const { session } = useClassroom();
   if (!session) return null;
+  const participants = Array.from(
+    new Map(
+      session.participants
+        .filter((participant) => participant.role !== "teacher" && participant.isOnline)
+        .map((participant) => [participant.id, participant]),
+    ).values(),
+  );
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden rounded-xl border-2 border-outline-variant bg-surface-container-lowest p-unit shadow-sm">
+    <div className="flex flex-1 flex-col overflow-hidden rounded-2xl border border-outline-variant bg-white/90 p-3 shadow-[0_18px_48px_rgba(18,32,51,0.08)]">
       <div className="mb-unit flex items-center justify-between">
         <h2 className="flex items-center gap-2 font-body text-label-lg text-on-surface">
           <Icon name="groups" />
-          Alumnos ({session.participants.length})
+          Alumnos ({participants.length})
         </h2>
         <button
           type="button"
@@ -34,10 +41,15 @@ export function ParticipantsList() {
       </div>
 
       <ul className="flex-1 space-y-2 overflow-y-auto pr-1">
-        {session.participants.map((participant) => (
+        {participants.length === 0 && (
+          <li className="rounded-2xl border border-dashed border-outline-variant p-4 text-center font-body text-label-sm text-on-surface-variant">
+            Esperando estudiantes conectados
+          </li>
+        )}
+        {participants.map((participant) => (
           <li
             key={participant.id}
-            className="flex items-center gap-3 rounded-lg p-2 transition-colors hover:bg-surface-container-low"
+            className="flex items-center gap-3 rounded-2xl border border-outline-variant/60 bg-surface-container-lowest p-2 transition-colors hover:bg-surface-container-low"
           >
             <div
               className={cn(

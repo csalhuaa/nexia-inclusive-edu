@@ -21,7 +21,7 @@ export function SignLanguagePanel() {
   return (
     <section
       aria-label="Avatar de Lengua de Señas"
-      className="absolute bottom-4 right-4 z-30 flex h-[min(56vh,520px)] w-[min(48vw,380px)] min-w-[230px] flex-col overflow-hidden rounded-2xl border-2 border-secondary/80 bg-[#0f172a] shadow-2xl"
+      className="z-30 flex h-64 w-full flex-col overflow-hidden rounded-2xl border-2 border-secondary/80 bg-[#0f172a] shadow-2xl md:absolute md:bottom-4 md:right-4 md:h-[min(46vh,420px)] md:w-[min(34vw,340px)] md:min-w-[230px]"
     >
       <div className="relative min-h-0 flex-1">
         <CurrentSignBadge currentGloss={currentGloss} isPlaying={isSpeaking} />

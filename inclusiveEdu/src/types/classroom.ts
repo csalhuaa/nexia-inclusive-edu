@@ -14,6 +14,7 @@ export type Participant = {
   role: UserRole;
   accessibility?: ParticipantAccessibility;
   isOnline: boolean;
+  lastSeenAt?: number;
 };
 
 export type SlideContent = {

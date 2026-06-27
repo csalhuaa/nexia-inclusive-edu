@@ -88,7 +88,7 @@ function generateClassCode(): string {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
 }
 
-export function createDemoSession(title = "Clase de Matemáticas"): ClassroomSession {
+export function createDemoSession(title = "Sesión de hoy"): ClassroomSession {
   return {
     id: crypto.randomUUID(),
     code: generateClassCode(),

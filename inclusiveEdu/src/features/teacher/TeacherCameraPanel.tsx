@@ -4,9 +4,14 @@ import { useClassroom } from "@/hooks/useClassroom";
 import { Icon } from "@/components/ui/Icon";
 import { classroomSocket } from "@/lib/ws/classroomSocket";
 import { uploadScreenshot } from "@/lib/api/classroom";
+import { AvatarVideo } from "@/features/deaf-student/components/AvatarVideo";
 
-export function TeacherCameraPanel() {
-  const { session, toggleMedia, toggleBoardCamera } = useClassroom();
+type TeacherCameraPanelProps = {
+  large?: boolean;
+};
+
+export function TeacherCameraPanel({ large = false }: TeacherCameraPanelProps) {
+  const { session, toggleMedia, toggleBoardCamera, teacherIsSpeaking } = useClassroom();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const uploadInFlightRef = useRef(false);
@@ -160,13 +165,17 @@ export function TeacherCameraPanel() {
   if (!session) return null;
 
   return (
-    <div className="flex flex-col rounded-xl border-2 border-outline-variant bg-surface-container-lowest p-unit shadow-sm">
+    <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-outline-variant bg-white/90 p-3 shadow-[0_18px_48px_rgba(18,32,51,0.08)]">
       <h2 className="mb-unit flex items-center gap-2 font-body text-label-lg text-on-surface">
         <Icon name={boardCamera ? "photo_camera" : "video_camera_front"} />
         {screenShare ? "Pantalla Compartida" : boardCamera ? "Cámara de Pizarra" : "Cámara Docente"}
       </h2>
 
-      <div className="relative mb-4 flex aspect-video w-full items-center justify-center overflow-hidden rounded-xl border border-outline bg-inverse-surface">
+      <div
+        className={`relative mb-4 flex w-full items-center justify-center overflow-hidden rounded-2xl border border-outline bg-inverse-surface ${
+          large ? "min-h-[420px] flex-1" : "aspect-video"
+        }`}
+      >
         {screenShare ? (
           <div className="flex flex-col items-center gap-2 text-inverse-on-surface/70">
             <Icon name="screen_share" size={40} />
@@ -201,7 +210,18 @@ export function TeacherCameraPanel() {
             </div>
           </>
         )}
-        <div className="absolute bottom-2 right-2 flex gap-2">
+        {!screenShare && (
+          <div className="absolute bottom-3 right-3 w-[min(34%,180px)] min-w-[110px] overflow-hidden rounded-xl border border-white/25 bg-black/70 shadow-2xl">
+            <div className="flex items-center justify-between bg-black/60 px-2 py-1 text-[10px] font-semibold text-white">
+              <span>Intérprete AI</span>
+              <span className={teacherIsSpeaking ? "text-emerald-300" : "text-white/55"}>
+                {teacherIsSpeaking ? "Activo" : "Espera"}
+              </span>
+            </div>
+            <AvatarVideo isSpeaking={teacherIsSpeaking} compact className="rounded-none shadow-none" />
+          </div>
+        )}
+        <div className="absolute bottom-2 left-2 flex gap-2">
           <button
             type="button"
             aria-label={audio ? "Silenciar micrófono" : "Activar micrófono"}
