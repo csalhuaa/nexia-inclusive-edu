@@ -42,8 +42,8 @@ export function DeafStudentPage() {
       ) : session?.status === "ended" ? (
         <SessionEndedNotice message="La clase terminó. Puedes volver al inicio para unirte a otra sesión." />
       ) : (
-        <div className="grid flex-1 grid-rows-[minmax(0,1fr)_auto] gap-3 overflow-hidden bg-transparent p-3 md:p-gutter">
-          <div className="grid min-h-0 gap-3 md:grid-cols-2 md:grid-rows-[minmax(0,1fr)_minmax(260px,36vh)] xl:grid-cols-[22%_58%_20%] xl:grid-rows-1">
+        <div className="flex flex-1 flex-col gap-3 overflow-y-auto overflow-x-hidden md:grid md:grid-rows-[minmax(0,1fr)_auto] md:overflow-hidden bg-transparent p-3 md:p-gutter">
+          <div className="flex flex-col min-h-0 gap-3 md:grid md:grid-cols-2 md:grid-rows-[minmax(0,1fr)_minmax(260px,36vh)] xl:grid-cols-[22%_58%_20%] xl:grid-rows-1">
             <div className="min-h-[300px] md:order-2 xl:order-1 xl:min-h-0">
               <SignLanguagePanel />
             </div>

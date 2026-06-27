@@ -19,7 +19,7 @@ export function TeacherPage() {
         <PageLoader label="Preparando aula del docente…" />
       ) : (
         <>
-          <main className="relative flex flex-1 flex-col gap-gutter overflow-hidden bg-transparent p-unit md:flex-row">
+          <main className="relative flex flex-1 flex-col gap-gutter overflow-y-auto overflow-x-hidden md:overflow-hidden bg-transparent p-unit md:flex-row">
             <TeacherWhiteboard />
             <aside className="flex w-full shrink-0 flex-col gap-unit md:w-72">
               <ParticipantsList />

@@ -39,7 +39,7 @@ export function BlindStudentPage() {
           id="main-content"
           role="main"
           aria-label="Contenido Principal: Clase en curso"
-          className="flex flex-grow flex-col items-center justify-center gap-8 p-gutter md:p-container-padding"
+          className="flex flex-grow flex-col items-center gap-8 py-10 px-4 md:justify-center md:px-container-padding md:py-16"
         >
           <AudioStatusBar />
           <LiveCaptionPanel />
