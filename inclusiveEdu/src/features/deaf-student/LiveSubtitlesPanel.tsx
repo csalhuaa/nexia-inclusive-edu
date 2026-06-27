@@ -9,7 +9,7 @@ export function LiveSubtitlesPanel() {
 
   const subtitles = session?.subtitles ?? [];
   const currentLine = subtitles.at(-1)?.text ?? "";
-  const history = subtitles.slice(-6, -1);
+  const history = subtitles.slice(-12, -1);
   const speed = session?.subtitleSpeed ?? 1;
 
   useEffect(() => {
@@ -21,19 +21,19 @@ export function LiveSubtitlesPanel() {
   return (
     <section
       aria-label="Subtítulos en vivo"
-      className="flex min-h-[220px] shrink-0 flex-col overflow-hidden rounded-2xl border-2 border-outline-variant bg-[#0a0a12] shadow-xl md:min-h-[260px]"
+      className="flex h-full min-h-0 flex-col overflow-hidden rounded-3xl border border-outline-variant bg-white shadow-[0_18px_48px_rgba(18,32,51,0.1)]"
     >
-      <header className="flex items-center justify-between border-b border-white/10 bg-[#12121c] px-5 py-3">
+      <header className="flex items-center justify-between border-b border-outline-variant/70 bg-white px-4 py-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary/20">
-            <Icon name="closed_caption" size={22} className="text-secondary-fixed" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-secondary-container">
+            <Icon name="closed_caption" size={22} className="text-secondary" />
           </div>
           <div>
-            <p className="font-headline text-label-lg text-white">Subtítulos en Vivo</p>
-            <p className="font-body text-label-sm text-white/60">Transcripción automática (STT)</p>
+            <p className="font-headline text-label-lg text-on-surface">Subtítulos</p>
+            <p className="font-body text-label-sm text-on-surface-variant">Transcripción STT</p>
           </div>
-          <span className="ml-2 flex items-center gap-1.5 rounded-full bg-error/20 px-2.5 py-1 font-body text-label-sm text-red-300">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-red-400" aria-hidden="true" />
+          <span className="ml-2 flex items-center gap-1.5 rounded-full bg-error-container px-2.5 py-1 font-body text-label-sm font-semibold text-on-error-container">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-error" aria-hidden="true" />
             LIVE
           </span>
         </div>
@@ -44,11 +44,11 @@ export function LiveSubtitlesPanel() {
             aria-label="Reducir velocidad de lectura"
             onClick={() => adjustSpeed(-0.25)}
             disabled={speed <= 0.5}
-            className="flex h-10 w-10 items-center justify-center rounded-lg text-white/80 transition-colors hover:bg-white/10 disabled:opacity-40"
+            className="flex h-9 w-9 items-center justify-center rounded-xl text-on-surface-variant transition-colors hover:bg-surface-variant disabled:opacity-40"
           >
             <Icon name="remove" size={20} />
           </button>
-          <span className="min-w-[4rem] text-center font-body text-label-sm text-white/90">
+          <span className="min-w-[3rem] text-center font-body text-label-sm text-on-surface-variant">
             {speed.toFixed(1)}x
           </span>
           <button
@@ -56,50 +56,58 @@ export function LiveSubtitlesPanel() {
             aria-label="Aumentar velocidad de lectura"
             onClick={() => adjustSpeed(0.25)}
             disabled={speed >= 2}
-            className="flex h-10 w-10 items-center justify-center rounded-lg text-white/80 transition-colors hover:bg-white/10 disabled:opacity-40"
+            className="flex h-9 w-9 items-center justify-center rounded-xl text-on-surface-variant transition-colors hover:bg-surface-variant disabled:opacity-40"
           >
             <Icon name="add" size={20} />
           </button>
         </div>
       </header>
 
-      <div ref={scrollRef} className="flex flex-1 flex-col justify-end gap-3 overflow-y-auto p-5 md:p-6">
+      <div ref={scrollRef} className="flex flex-1 flex-col justify-end gap-3 overflow-y-auto bg-surface-container-lowest p-4">
         {history.map((entry) => (
-          <p
+          <article
             key={entry.id}
-            className="font-body text-body-md leading-relaxed text-white/35 transition-opacity"
+            className="rounded-2xl bg-surface-container px-3 py-2 shadow-sm"
           >
-            {entry.text}
-          </p>
+            <p className="font-body text-[11px] font-semibold text-on-surface-variant">
+              {new Date(entry.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            </p>
+            <p className="mt-1 font-body text-label-sm leading-relaxed text-on-surface-variant">
+              {entry.text}
+            </p>
+          </article>
         ))}
 
         {currentLine ? (
-          <p
+          <article
             aria-live="polite"
             aria-atomic="true"
-            className={cn(
-              "subtitle-current font-headline text-headline-lg-mobile leading-snug text-white md:text-headline-lg",
-            )}
+            className="rounded-3xl border border-primary/20 bg-primary-fixed/80 p-4 shadow-sm"
           >
+            <p className="mb-1 font-body text-[11px] font-semibold text-on-primary-fixed-variant">
+              Subtítulo actual
+            </p>
+            <p className={cn("font-headline text-body-lg leading-snug text-on-primary-fixed")}>
             {currentLine.split(" ").map((word, i, arr) => (
               <span
                 key={`${entryWordKey(word, i)}`}
                 className={cn(
                   "mr-1.5 inline",
-                  i >= arr.length - 3 ? "text-secondary-fixed font-bold" : "",
+                  i >= arr.length - 3 ? "text-primary font-bold" : "",
                 )}
               >
                 {word}
               </span>
             ))}
-          </p>
+            </p>
+          </article>
         ) : (
           <div className="flex flex-col items-center justify-center gap-3 py-6 text-center">
-            <Icon name="hearing_disabled" size={40} className="text-white/30" />
-            <p className="font-body text-body-md text-white/50">
+            <Icon name="hearing_disabled" size={40} className="text-outline" />
+            <p className="font-body text-body-md text-on-surface-variant">
               Esperando transcripción del docente…
             </p>
-            <p className="font-body text-label-sm text-white/30">
+            <p className="font-body text-label-sm text-outline">
               Los subtítulos aparecerán aquí en tiempo real
             </p>
           </div>

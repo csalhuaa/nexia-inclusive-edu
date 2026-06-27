@@ -11,6 +11,13 @@ export function SessionBar() {
   if (!session) return null;
 
   const slide = session.slides[session.slideIndex];
+  const connectedCount = Array.from(
+    new Map(
+      session.participants
+        .filter((participant) => participant.isOnline)
+        .map((participant) => [participant.id, participant]),
+    ).values(),
+  ).length;
   const copyCode = async () => {
     await navigator.clipboard.writeText(session.code);
     showToast(`Código ${session.code} copiado`, "success");
@@ -40,7 +47,7 @@ export function SessionBar() {
           Código: <strong>{session.code}</strong>
         </button>
         <StatusChip
-          label={`${session.participants.filter((p) => p.isOnline).length} conectados`}
+          label={`${connectedCount} conectados`}
           icon={<Icon name="groups" size={14} />}
         />
       </div>

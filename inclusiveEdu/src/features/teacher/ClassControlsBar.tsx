@@ -15,7 +15,7 @@ const MIN_STT_BLOB_BYTES = 12_000;
 const VOICE_ACTIVITY_THRESHOLD = 0.08;
 
 export function ClassControlsBar() {
-  const { session, toggleMedia, toggleBoardCamera, endSession, pushSubtitle } = useClassroom();
+  const { session, toggleMedia, toggleBoardCamera, endClassroom, pushSubtitle } = useClassroom();
   const { showToast } = useToast();
   const navigate = useNavigate();
   const micStreamRef = useRef<MediaStream | null>(null);
@@ -221,7 +221,7 @@ export function ClassControlsBar() {
   if (!session) return null;
 
   const handleEnd = () => {
-    endSession();
+    endClassroom();
     navigate(ROUTES.home);
   };
 

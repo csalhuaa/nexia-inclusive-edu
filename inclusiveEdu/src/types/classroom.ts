@@ -79,6 +79,7 @@ export type ClassroomEvent =
   | { type: "caption"; payload: string }
   | { type: "sign_gloss"; payload: SignGlossPayload }
   | { type: "screen_frame"; payload: ScreenFramePayload }
+  | { type: "screen_share_stopped" }
   | { type: "teacher_audio_chunk"; payload: { data: string; mimeType: string } }
   | { type: "teacher_speaking"; payload: { active: boolean } }
   | { type: "webrtc_ready"; payload: { from: string } }

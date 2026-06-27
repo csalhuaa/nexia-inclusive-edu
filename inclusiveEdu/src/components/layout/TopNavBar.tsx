@@ -61,11 +61,15 @@ function ClassroomRoleLabel({ role }: { role: string | null }) {
 export function TopNavBar({ variant = "classroom" }: TopNavBarProps) {
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const { session, endSession } = useClassroom();
+  const { session, leaveClassroom, endClassroom } = useClassroom();
   const navItems = variant === "home" ? HOME_NAV : CLASSROOM_NAV;
 
   const handleLeave = () => {
-    endSession();
+    if (session?.role === "teacher") {
+      endClassroom();
+    } else {
+      leaveClassroom();
+    }
     navigate(ROUTES.home);
   };
 
@@ -106,11 +110,11 @@ export function TopNavBar({ variant = "classroom" }: TopNavBarProps) {
           <button
             type="button"
             onClick={handleLeave}
-            aria-label="Salir de la clase"
+            aria-label={session.role === "teacher" ? "Finalizar clase" : "Salir de la clase"}
             className="hidden items-center gap-1 rounded-xl px-3 py-2 font-body text-label-sm text-on-surface-variant transition-colors hover:bg-error-container hover:text-on-error-container md:flex"
           >
             <Icon name="logout" size={18} />
-            Salir
+            {session.role === "teacher" ? "Finalizar" : "Salir"}
           </button>
         )}
         {variant === "home" && <NavLinks items={navItems} activePath={pathname} />}

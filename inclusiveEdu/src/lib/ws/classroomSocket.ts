@@ -61,6 +61,7 @@ export class ClassroomSocket {
         "caption",
         "sign_gloss",
         "screen_frame",
+        "screen_share_stopped",
         "teacher_audio_chunk",
         "teacher_speaking",
         "webrtc_ready",

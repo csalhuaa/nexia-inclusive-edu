@@ -45,7 +45,7 @@ export function AvatarVideo({ isSpeaking, className, compact = false }: AvatarVi
           "h-full w-full object-cover transition-opacity duration-200 ease-out",
           isFading ? "opacity-75" : "opacity-100",
         )}
-        style={{ objectPosition: compact ? "center 32%" : "center 35%" }}
+        style={{ objectPosition: compact ? "center 38%" : "center 42%" }}
         autoPlay
         muted
         loop

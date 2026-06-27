@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useClassroom } from "@/hooks/useClassroom";
 import { StatusChip } from "@/components/ui/StatusChip";
 import { Icon } from "@/components/ui/Icon";
@@ -52,22 +52,41 @@ export function TeacherWhiteboard() {
   const uploadInFlightRef = useRef(false);
   const lastScreenSampleRef = useRef<Uint8ClampedArray | null>(null);
   const lastScreenUploadAtRef = useRef(0);
+  const lastPreviewFrameAtRef = useRef(0);
   const rateLimitUntilRef = useRef(0);
   const firstScreenUploadPendingRef = useRef(false);
+  const screenWasActiveRef = useRef(false);
   const [screenStatus, setScreenStatus] = useState("Listo para compartir pantalla");
   const [activeTab, setActiveTab] = useState<"screen" | "board">("screen");
 
   const screenShare = session?.media.screenShare ?? false;
   const sessionId = session?.id;
 
+  const publishScreenShareStopped = useCallback(() => {
+    if (!screenWasActiveRef.current && !screenStreamRef.current) return;
+
+    screenWasActiveRef.current = false;
+    screenStreamRef.current?.getTracks().forEach((track) => track.stop());
+    screenStreamRef.current = null;
+    lastScreenSampleRef.current = null;
+    firstScreenUploadPendingRef.current = false;
+    rateLimitUntilRef.current = 0;
+    lastPreviewFrameAtRef.current = 0;
+    uploadInFlightRef.current = false;
+    if (screenVideoRef.current) {
+      screenVideoRef.current.srcObject = null;
+    }
+    setScreenStatus("Listo para compartir pantalla");
+    classroomSocket.send({ type: "screen_share_stopped" });
+    classroomSocket.send({
+      type: "screen_frame",
+      payload: { data: "", width: 0, height: 0 },
+    });
+  }, []);
+
   useEffect(() => {
     if (!screenShare) {
-      screenStreamRef.current?.getTracks().forEach((track) => track.stop());
-        screenStreamRef.current = null;
-        lastScreenSampleRef.current = null;
-        firstScreenUploadPendingRef.current = false;
-        rateLimitUntilRef.current = 0;
-        setScreenStatus("Listo para compartir pantalla");
+      publishScreenShareStopped();
       return;
     }
 
@@ -88,6 +107,7 @@ export function TeacherWhiteboard() {
 
         screenStreamRef.current?.getTracks().forEach((track) => track.stop());
         screenStreamRef.current = stream;
+        screenWasActiveRef.current = true;
 
         if (screenVideoRef.current) {
           screenVideoRef.current.srcObject = stream;
@@ -95,6 +115,7 @@ export function TeacherWhiteboard() {
         }
 
         stream.getVideoTracks()[0]?.addEventListener("ended", () => {
+          publishScreenShareStopped();
           if (screenShare) toggleMedia("screenShare");
         });
 
@@ -110,7 +131,7 @@ export function TeacherWhiteboard() {
     return () => {
       cancelled = true;
     };
-  }, [screenShare, toggleMedia]);
+  }, [publishScreenShareStopped, screenShare, toggleMedia]);
 
   useEffect(() => {
     if (!screenShare || session?.connectionMode !== "api" || !sessionId) return;
@@ -142,14 +163,50 @@ export function TeacherWhiteboard() {
       return changedPixels / (sample.length / 4) > 0.05;
     }
 
+    function publishPreviewFrame(videoElement: HTMLVideoElement, sourceCanvas: HTMLCanvasElement) {
+      const now = Date.now();
+      if (now - lastPreviewFrameAtRef.current < 1000) return;
+      lastPreviewFrameAtRef.current = now;
+
+      const previewCanvas = document.createElement("canvas");
+      const maxFrameWidth = 960;
+      const scale = Math.min(1, maxFrameWidth / sourceCanvas.width);
+      previewCanvas.width = Math.round(sourceCanvas.width * scale);
+      previewCanvas.height = Math.round(sourceCanvas.height * scale);
+      const previewCtx = previewCanvas.getContext("2d");
+      if (!previewCtx) return;
+      previewCtx.drawImage(videoElement, 0, 0, previewCanvas.width, previewCanvas.height);
+      previewCanvas.toBlob((sendBlob) => {
+        if (sendBlob) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            classroomSocket.send({
+              type: "screen_frame",
+              payload: {
+                data: reader.result as string,
+                width: previewCanvas.width,
+                height: previewCanvas.height,
+              },
+            });
+          };
+          reader.readAsDataURL(sendBlob);
+        }
+      }, "image/jpeg", 0.72);
+    }
+
     async function captureAndUploadScreen() {
-      if (uploadInFlightRef.current || !screenVideoRef.current) return;
+      if (!screenVideoRef.current) return;
+      const videoElement = screenVideoRef.current;
+      if (videoElement.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
+      const canvas = drawScaledFrame(videoElement);
+      if (!canvas) return;
+      publishPreviewFrame(videoElement, canvas);
+
+      if (uploadInFlightRef.current) return;
       if (Date.now() < rateLimitUntilRef.current) {
         setScreenStatus("Visión en espera por límite de API");
         return;
       }
-      const videoElement = screenVideoRef.current;
-      if (videoElement.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
       const forceFirstUpload = firstScreenUploadPendingRef.current;
       if (!forceFirstUpload && !hasMeaningfulScreenChange(videoElement)) {
         setScreenStatus("Pantalla sin cambios relevantes");
@@ -163,34 +220,10 @@ export function TeacherWhiteboard() {
         return;
       }
 
-      const canvas = drawScaledFrame(videoElement);
-      if (!canvas) return;
       const blob = await new Promise<Blob | null>((resolve) =>
         canvas.toBlob(resolve, "image/jpeg", 0.82),
       );
       if (!blob) return;
-
-      const sendCanvas = document.createElement("canvas");
-      const maxFrameWidth = 640;
-      const scale = Math.min(1, maxFrameWidth / canvas.width);
-      sendCanvas.width = Math.round(canvas.width * scale);
-      sendCanvas.height = Math.round(canvas.height * scale);
-      const sendCtx = sendCanvas.getContext("2d");
-      if (sendCtx) {
-        sendCtx.drawImage(canvas, 0, 0, sendCanvas.width, sendCanvas.height);
-        sendCanvas.toBlob((sendBlob) => {
-          if (sendBlob) {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-              classroomSocket.send({
-                type: "screen_frame",
-                payload: { data: reader.result as string, width: sendCanvas.width, height: sendCanvas.height },
-              });
-            };
-            reader.readAsDataURL(sendBlob);
-          }
-        }, "image/jpeg", 0.55);
-      }
 
       uploadInFlightRef.current = true;
       lastScreenUploadAtRef.current = now;

@@ -153,6 +153,25 @@ function buildParticipantPresence(session: ClassroomSession): Participant {
   };
 }
 
+function uniqueParticipants(participants: Participant[]): Participant[] {
+  return Array.from(new Map(participants.map((participant) => [participant.id, participant])).values());
+}
+
+function participantsAreEqual(left: Participant[], right: Participant[]): boolean {
+  if (left.length !== right.length) return false;
+  return left.every((participant, index) => {
+    const other = right[index];
+    return (
+      other &&
+      participant.id === other.id &&
+      participant.name === other.name &&
+      participant.role === other.role &&
+      participant.accessibility === other.accessibility &&
+      participant.isOnline === other.isOnline
+    );
+  });
+}
+
 type ClassroomProviderProps = {
   children: ReactNode;
   onToast?: ToastFn;
@@ -358,7 +377,11 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
     if (!session || session.status !== "live" || session.role === "teacher") return undefined;
 
     const sendPresence = (isOnline = true) => {
-      const participant = buildParticipantPresence(session);
+      const currentSession = sessionRef.current;
+      if (!currentSession || currentSession.status !== "live" || currentSession.role === "teacher") {
+        return;
+      }
+      const participant = buildParticipantPresence(currentSession);
       classroomSocket.send({
         type: "participant",
         payload: { ...participant, isOnline, lastSeenAt: Date.now() },
@@ -371,19 +394,21 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
       window.clearInterval(timer);
       sendPresence(false);
     };
-  }, [session]);
+  }, [session?.id, session?.role, session?.status]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
       setSession((prev) => {
         if (!prev || prev.role !== "teacher") return prev;
         const now = Date.now();
-        const participants = prev.participants.filter(
-          (participant) =>
-            participant.role === "teacher" ||
-            (participant.isOnline && now - (participant.lastSeenAt ?? now) < PARTICIPANT_STALE_MS),
+        const participants = uniqueParticipants(
+          prev.participants.filter(
+            (participant) =>
+              participant.role === "teacher" ||
+              (participant.isOnline && now - (participant.lastSeenAt ?? now) < PARTICIPANT_STALE_MS),
+          ),
         );
-        return participants.length === prev.participants.length
+        return participantsAreEqual(participants, prev.participants)
           ? prev
           : applySessionPatch(prev, { participants });
       });
@@ -443,9 +468,10 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
             setSession((prev) => {
               if (!prev) return prev;
               if (!event.payload.isOnline) {
-                return applySessionPatch(prev, {
-                  participants: prev.participants.filter((p) => p.id !== event.payload.id),
-                });
+                const participants = prev.participants.filter((p) => p.id !== event.payload.id);
+                return participantsAreEqual(participants, prev.participants)
+                  ? prev
+                  : applySessionPatch(prev, { participants });
               }
               const payload = { ...event.payload, lastSeenAt: event.payload.lastSeenAt ?? Date.now() };
               const current = prev.participants.find((p) => p.id === payload.id);
@@ -459,9 +485,9 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
               ) {
                 return prev;
               }
-              const participants = current
+              const participants = uniqueParticipants(current
                 ? prev.participants.map((p) => (p.id === payload.id ? payload : p))
-                : [...prev.participants, payload];
+                : [...prev.participants, payload]);
               return applySessionPatch(prev, { participants });
             });
           }
@@ -474,9 +500,22 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
             setSession((prev) => (prev ? applySessionPatch(prev, { media: event.payload }) : prev));
           }
           if (event.type === "screen_frame") {
-            setLatestScreenFrame(event.payload);
+            setLatestScreenFrame(event.payload.data ? event.payload : null);
+          }
+          if (event.type === "screen_share_stopped") {
+            setLatestScreenFrame(null);
+            setSession((prev) =>
+              prev
+                ? applySessionPatch(prev, {
+                    media: { ...prev.media, screenShare: false },
+                  })
+                : prev,
+            );
           }
           if (event.type === "session_end") {
+            stopSimulation();
+            stopNarration();
+            stopTeacherAudio();
             setSession((prev) => (prev ? applySessionPatch(prev, { status: "ended" }) : prev));
             toast("La clase ha finalizado", "info");
           }
@@ -484,7 +523,7 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
         () => toast("Conexión en tiempo real interrumpida", "error"),
       );
     },
-    [markTeacherSpeaking, pushSubtitle, queueBoardNarration, setCaption, toast],
+    [markTeacherSpeaking, pushSubtitle, queueBoardNarration, setCaption, stopNarration, stopSimulation, stopTeacherAudio, toast],
   );
 
   useEffect(() => {
@@ -504,6 +543,8 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
       });
       setSession(hydrated);
       setLatestScreenFrame(null);
+      setLatestSignGloss(null);
+      setTeacherIsSpeaking(false);
       pushSubtitle("Clase iniciada — los subtítulos aparecerán aquí");
       startSimulation(mode);
       connectRealtime(hydrated.id, mode);
@@ -569,14 +610,47 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
     [activateSession, apiAvailable, toast],
   );
 
-  const endSession = useCallback(() => {
+  const leaveClassroom = useCallback(() => {
+    const currentSession = sessionRef.current;
+    if (currentSession && currentSession.role !== "teacher") {
+      const participant = buildParticipantPresence(currentSession);
+      classroomSocket.send({
+        type: "participant",
+        payload: { ...participant, isOnline: false, lastSeenAt: Date.now() },
+      });
+    }
+
     stopSimulation();
     stopNarration();
     stopTeacherAudio();
     classroomSocket.disconnect();
+    setLatestScreenFrame(null);
+    setLatestSignGloss(null);
+    setTeacherIsSpeaking(false);
+    setSession(null);
+    toast("Saliste de la clase", "info");
+  }, [stopNarration, stopSimulation, stopTeacherAudio, toast]);
+
+  const endClassroom = useCallback(() => {
+    classroomSocket.send({ type: "session_end" });
+    stopSimulation();
+    stopNarration();
+    stopTeacherAudio();
+    classroomSocket.disconnect();
+    setLatestScreenFrame(null);
+    setLatestSignGloss(null);
+    setTeacherIsSpeaking(false);
     setSession((prev) => (prev ? applySessionPatch(prev, { status: "ended" }) : prev));
     toast("Clase finalizada", "info");
   }, [stopNarration, stopSimulation, stopTeacherAudio, toast]);
+
+  const endSession = useCallback(() => {
+    if (sessionRef.current?.role === "teacher") {
+      endClassroom();
+      return;
+    }
+    leaveClassroom();
+  }, [endClassroom, leaveClassroom]);
 
   const toggleMedia = useCallback((key: keyof MediaState) => {
     setSession((prev) => {
@@ -669,6 +743,8 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
       createSession: createSessionHandler,
       joinSession: joinSessionHandler,
       endSession,
+      leaveClassroom,
+      endClassroom,
       toggleMedia,
       nextSlide,
       prevSlide,
@@ -694,6 +770,8 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
       createSessionHandler,
       joinSessionHandler,
       endSession,
+      leaveClassroom,
+      endClassroom,
       toggleMedia,
       nextSlide,
       prevSlide,
