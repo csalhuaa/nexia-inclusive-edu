@@ -17,7 +17,7 @@ export function SessionBar() {
   };
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-outline-variant bg-surface-container-low px-gutter py-3">
+    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-outline-variant/70 bg-white/75 px-gutter py-3 shadow-sm backdrop-blur-xl">
       <div className="flex flex-wrap items-center gap-3">
         <ConnectionBadge />
         <div>
@@ -34,7 +34,7 @@ export function SessionBar() {
           onClick={() => void copyCode()}
           title="Copiar código de clase"
           aria-label={`Copiar código de clase ${session.code}`}
-          className="inline-flex min-h-touch-target-min items-center gap-2 rounded-full bg-primary-fixed px-3 py-1.5 font-body text-label-sm text-on-primary-fixed transition-colors hover:bg-primary-fixed/80 focus-visible:ring-3 focus-visible:ring-primary"
+          className="inline-flex min-h-touch-target-min items-center gap-2 rounded-full border border-primary/20 bg-primary-fixed/85 px-3 py-1.5 font-body text-label-sm font-semibold text-on-primary-fixed shadow-sm transition-colors hover:bg-primary-fixed focus-visible:ring-3 focus-visible:ring-primary"
         >
           <Icon name="content_copy" size={14} />
           Código: <strong>{session.code}</strong>

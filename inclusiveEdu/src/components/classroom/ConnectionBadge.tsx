@@ -2,10 +2,10 @@ import { useClassroom } from "@/hooks/useClassroom";
 import { cn } from "@/lib/cn";
 
 const modeLabels = {
-  demo: { label: "Demo", color: "bg-tertiary-container text-on-tertiary-container" },
-  api: { label: "En vivo", color: "bg-secondary text-on-secondary" },
-  websocket: { label: "En vivo", color: "bg-secondary text-on-secondary" },
-  offline: { label: "Sin conexión", color: "bg-error-container text-on-error-container" },
+  demo: { label: "Demo", color: "border-tertiary/25 bg-tertiary-container text-on-tertiary-container" },
+  api: { label: "En vivo", color: "border-secondary/25 bg-secondary-container text-on-secondary-container" },
+  websocket: { label: "En vivo", color: "border-secondary/25 bg-secondary-container text-on-secondary-container" },
+  offline: { label: "Sin conexión", color: "border-error/25 bg-error-container text-on-error-container" },
 } as const;
 
 export function ConnectionBadge() {
@@ -17,7 +17,7 @@ export function ConnectionBadge() {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-2 rounded-full px-3 py-1 font-body text-label-sm",
+        "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 font-body text-label-sm font-semibold shadow-sm",
         config.color,
       )}
     >

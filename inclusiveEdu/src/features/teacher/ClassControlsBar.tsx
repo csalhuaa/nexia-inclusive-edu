@@ -213,8 +213,8 @@ export function ClassControlsBar() {
   };
 
   return (
-    <footer className="z-40 flex flex-wrap items-center justify-between gap-4 border-t-2 border-outline-variant bg-surface-container-highest p-4">
-      <div className="flex gap-2">
+    <footer className="z-40 flex flex-wrap items-center justify-between gap-4 border-t border-outline-variant/70 bg-white/85 p-4 shadow-[0_-12px_36px_rgba(18,32,51,0.08)] backdrop-blur-xl">
+      <div className="flex flex-wrap gap-2">
         <MediaToggle
           icon="mic"
           offIcon="mic_off"
@@ -263,7 +263,7 @@ export function ClassControlsBar() {
         <button
           type="button"
           onClick={() => void copyCode()}
-          className="hidden items-center gap-2 rounded-lg border border-outline-variant px-3 py-2 font-body text-label-sm text-on-surface-variant transition-colors hover:bg-surface-variant md:flex"
+          className="hidden min-h-touch-target-min items-center gap-2 rounded-full border border-outline-variant bg-white/70 px-3 py-2 font-body text-label-sm font-semibold text-on-surface-variant shadow-sm transition-colors hover:bg-primary-fixed/70 hover:text-primary md:flex"
           title="Copiar código de clase"
           aria-label={`Copiar código de clase ${session.code}`}
         >

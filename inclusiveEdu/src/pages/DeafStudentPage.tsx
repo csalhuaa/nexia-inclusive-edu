@@ -15,7 +15,7 @@ function VisionCaptionBar() {
   if (!caption) return null;
 
   return (
-    <div className="flex items-start gap-3 rounded-xl border border-secondary/20 bg-secondary-container/15 px-4 py-3">
+    <div className="edu-glass flex items-start gap-3 rounded-2xl px-4 py-3">
       <Icon name="description" size={20} className="mt-0.5 shrink-0 text-secondary" />
       <p className="font-body text-body-md leading-relaxed text-on-surface">
         {caption}
@@ -35,7 +35,7 @@ export function DeafStudentPage() {
       {!isReady || isLoading ? (
         <PageLoader label="Conectando a la clase…" />
       ) : (
-        <div className="flex flex-1 flex-col overflow-hidden bg-background">
+        <div className="flex flex-1 flex-col overflow-hidden bg-transparent">
           <div className="flex flex-1 flex-col gap-3 overflow-hidden p-3 md:flex-row md:p-gutter">
             <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
               <StudentWhiteboard />
