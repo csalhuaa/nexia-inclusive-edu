@@ -448,8 +448,18 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
                 });
               }
               const payload = { ...event.payload, lastSeenAt: event.payload.lastSeenAt ?? Date.now() };
-              const exists = prev.participants.some((p) => p.id === payload.id);
-              const participants = exists
+              const current = prev.participants.find((p) => p.id === payload.id);
+              if (
+                current &&
+                current.name === payload.name &&
+                current.role === payload.role &&
+                current.accessibility === payload.accessibility &&
+                current.isOnline === payload.isOnline &&
+                Date.now() - (current.lastSeenAt ?? 0) < 20_000
+              ) {
+                return prev;
+              }
+              const participants = current
                 ? prev.participants.map((p) => (p.id === payload.id ? payload : p))
                 : [...prev.participants, payload];
               return applySessionPatch(prev, { participants });

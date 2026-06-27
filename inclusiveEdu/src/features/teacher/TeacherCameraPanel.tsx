@@ -4,14 +4,13 @@ import { useClassroom } from "@/hooks/useClassroom";
 import { Icon } from "@/components/ui/Icon";
 import { classroomSocket } from "@/lib/ws/classroomSocket";
 import { uploadScreenshot } from "@/lib/api/classroom";
-import { AvatarVideo } from "@/features/deaf-student/components/AvatarVideo";
 
 type TeacherCameraPanelProps = {
   large?: boolean;
 };
 
 export function TeacherCameraPanel({ large = false }: TeacherCameraPanelProps) {
-  const { session, toggleMedia, toggleBoardCamera, teacherIsSpeaking } = useClassroom();
+  const { session, toggleMedia, toggleBoardCamera } = useClassroom();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const uploadInFlightRef = useRef(false);
@@ -173,7 +172,7 @@ export function TeacherCameraPanel({ large = false }: TeacherCameraPanelProps) {
 
       <div
         className={`relative mb-4 flex w-full items-center justify-center overflow-hidden rounded-2xl border border-outline bg-inverse-surface ${
-          large ? "min-h-[420px] flex-1" : "aspect-video"
+          large ? "min-h-[460px] flex-1" : "aspect-video"
         }`}
       >
         {screenShare ? (
@@ -209,17 +208,6 @@ export function TeacherCameraPanel({ large = false }: TeacherCameraPanelProps) {
               {lastUploadLabel}
             </div>
           </>
-        )}
-        {!screenShare && (
-          <div className="absolute bottom-3 right-3 w-[min(34%,180px)] min-w-[110px] overflow-hidden rounded-xl border border-white/25 bg-black/70 shadow-2xl">
-            <div className="flex items-center justify-between bg-black/60 px-2 py-1 text-[10px] font-semibold text-white">
-              <span>Intérprete AI</span>
-              <span className={teacherIsSpeaking ? "text-emerald-300" : "text-white/55"}>
-                {teacherIsSpeaking ? "Activo" : "Espera"}
-              </span>
-            </div>
-            <AvatarVideo isSpeaking={teacherIsSpeaking} compact className="rounded-none shadow-none" />
-          </div>
         )}
         <div className="absolute bottom-2 left-2 flex gap-2">
           <button

@@ -21,6 +21,30 @@ function drawScaledFrame(videoElement: HTMLVideoElement) {
   return canvas;
 }
 
+function TeacherInterpreterPreview({
+  isSpeaking,
+  status,
+}: {
+  isSpeaking: boolean;
+  status?: string;
+}) {
+  return (
+    <aside className="hidden min-h-0 flex-col rounded-2xl border border-white/10 bg-white/5 p-3 lg:flex">
+      <div className="mb-2 flex items-center justify-between text-white">
+        <span className="font-body text-label-sm font-semibold">Intérprete AI</span>
+        <span className={`text-[11px] ${isSpeaking ? "text-emerald-300" : "text-white/55"}`}>
+          {isSpeaking ? "Activo" : "En espera"}
+        </span>
+      </div>
+      <AvatarVideo isSpeaking={isSpeaking} compact className="h-auto" />
+      <p className="mt-3 font-body text-[11px] leading-relaxed text-white/60">
+        Vista previa compacta del intérprete que ven los estudiantes sordos.
+      </p>
+      {status && <StatusChip label={status} className="mt-auto justify-center" />}
+    </aside>
+  );
+}
+
 export function TeacherWhiteboard() {
   const { session, toggleMedia, teacherIsSpeaking } = useClassroom();
   const screenVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -237,7 +261,7 @@ export function TeacherWhiteboard() {
 
       <div className="relative flex-1 overflow-hidden bg-[#111318] p-4">
         {activeTab === "screen" ? (
-          <div className="grid h-full gap-4 lg:grid-cols-[1fr_220px]">
+          <div className="grid h-full gap-4 lg:grid-cols-[minmax(0,1fr)_240px]">
             <div className="flex h-full min-h-[360px] items-center justify-center rounded-2xl border border-outline-variant bg-black">
               {screenShare ? (
                 <video
@@ -268,22 +292,16 @@ export function TeacherWhiteboard() {
                 </div>
               )}
             </div>
-            <aside className="hidden min-h-0 flex-col rounded-2xl border border-white/10 bg-white/5 p-3 lg:flex">
-              <div className="mb-2 flex items-center justify-between text-white">
-                <span className="font-body text-label-sm font-semibold">Intérprete AI</span>
-                <span className={`text-[11px] ${teacherIsSpeaking ? "text-emerald-300" : "text-white/55"}`}>
-                  {teacherIsSpeaking ? "Activo" : "En espera"}
-                </span>
-              </div>
-              <AvatarVideo isSpeaking={teacherIsSpeaking} compact className="h-auto" />
-              <p className="mt-3 font-body text-[11px] leading-relaxed text-white/60">
-                Vista previa compacta del intérprete que ven los estudiantes sordos.
-              </p>
-              <StatusChip label={screenStatus} className="mt-auto justify-center" />
-            </aside>
+            <TeacherInterpreterPreview isSpeaking={teacherIsSpeaking} status={screenStatus} />
           </div>
         ) : (
-          <TeacherCameraPanel large />
+          <div className="grid h-full gap-4 lg:grid-cols-[minmax(0,1fr)_240px]">
+            <TeacherCameraPanel large />
+            <TeacherInterpreterPreview
+              isSpeaking={teacherIsSpeaking}
+              status={session.media.boardCamera ? "Cámara activa" : "Cámara lista"}
+            />
+          </div>
         )}
       </div>
     </section>

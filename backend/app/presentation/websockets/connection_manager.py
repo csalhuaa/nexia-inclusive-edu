@@ -14,10 +14,13 @@ class ConnectionManager:
         self._rooms[classroom_id].append(ws)
 
     async def disconnect(self, classroom_id: str, ws: WebSocket) -> None:
-        if classroom_id in self._rooms:
-            self._rooms[classroom_id].remove(ws)
-            if not self._rooms[classroom_id]:
-                del self._rooms[classroom_id]
+        room = self._rooms.get(classroom_id)
+        if not room:
+            return
+        if ws in room:
+            room.remove(ws)
+        if not room:
+            del self._rooms[classroom_id]
 
     async def broadcast(
         self, classroom_id: str, event: dict[str, Any]
@@ -33,7 +36,7 @@ class ConnectionManager:
         if classroom_id not in self._rooms:
             return
         dead: list[WebSocket] = []
-        for ws in self._rooms[classroom_id]:
+        for ws in list(self._rooms[classroom_id]):
             if ws is exclude:
                 continue
             try:
