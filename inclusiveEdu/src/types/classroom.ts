@@ -54,6 +54,7 @@ export type ClassroomSession = {
   media: MediaState;
   subtitles: SubtitleEntry[];
   currentCaption: string;
+  currentFullText: string;
   interpreterActive: boolean;
   connectionMode: ConnectionMode;
   subtitleSpeed: number;
@@ -79,7 +80,7 @@ export type ScreenFramePayload = {
 
 export type ClassroomEvent =
   | { type: "subtitle"; payload: SubtitleEntry }
-  | { type: "caption"; payload: string }
+  | { type: "caption"; payload: { explanation: string; full_text: string } }
   | { type: "sign_gloss"; payload: SignGlossPayload }
   | { type: "screen_frame"; payload: ScreenFramePayload }
   | { type: "screen_share_stopped" }

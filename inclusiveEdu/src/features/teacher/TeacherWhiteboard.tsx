@@ -300,13 +300,25 @@ export function TeacherWhiteboard() {
           <div className="grid h-full gap-4 lg:grid-cols-[minmax(0,1fr)_240px]">
             <div className="flex h-full min-h-[360px] items-center justify-center rounded-2xl border border-outline-variant bg-black">
               {screenShare ? (
-                <video
-                  ref={screenVideoRef}
-                  autoPlay
-                  muted
-                  playsInline
-                  className="h-full max-h-full w-full object-contain"
-                />
+                <div className="relative flex h-full max-h-full w-full items-center justify-center">
+                  <video
+                    ref={screenVideoRef}
+                    autoPlay
+                    muted
+                    playsInline
+                    className="h-full max-h-full w-full object-contain"
+                  />
+                  <div className="absolute bottom-6 left-1/2 flex -translate-x-1/2 items-center gap-4 rounded-full bg-surface-container-high/95 px-6 py-3 shadow-[0_8px_32px_rgba(0,0,0,0.4)] backdrop-blur-md">
+                    <span className="font-body text-label-lg text-on-surface">Estás compartiendo tu pantalla</span>
+                    <button
+                      type="button"
+                      onClick={() => toggleMedia("screenShare")}
+                      className="rounded-full bg-error px-4 py-2 font-body text-label-sm font-semibold text-on-error shadow-sm transition-colors hover:bg-error/90 focus-visible:ring-3 focus-visible:ring-error focus-visible:ring-offset-2"
+                    >
+                      Dejar de compartir
+                    </button>
+                  </div>
+                </div>
               ) : (
                 <div className="flex flex-col items-center gap-4 text-center text-inverse-on-surface/70">
                   <Icon name="screen_share" size={56} />

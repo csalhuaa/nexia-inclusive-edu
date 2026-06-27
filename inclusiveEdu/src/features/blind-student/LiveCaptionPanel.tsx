@@ -3,6 +3,7 @@ import { useClassroom } from "@/hooks/useClassroom";
 export function LiveCaptionPanel() {
   const { session } = useClassroom();
   const caption = session?.currentCaption ?? "Esperando narración del docente…";
+  const fullText = session?.currentFullText;
 
   return (
     <section
@@ -18,6 +19,20 @@ export function LiveCaptionPanel() {
       >
         &ldquo;{caption}&rdquo;
       </p>
+      
+      {fullText && (
+        <div className="mt-8 border-t border-primary/10 pt-8 text-left">
+          <h2 className="mb-4 font-headline text-title-lg text-on-surface-variant">
+            Texto detectado en la pizarra:
+          </h2>
+          <p
+            aria-live="polite"
+            className="whitespace-pre-wrap font-body text-body-lg text-on-surface"
+          >
+            {fullText}
+          </p>
+        </div>
+      )}
     </section>
   );
 }

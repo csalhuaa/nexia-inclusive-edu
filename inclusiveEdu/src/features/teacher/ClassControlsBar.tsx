@@ -6,13 +6,10 @@ import { useClassroom } from "@/hooks/useClassroom";
 import { useToast } from "@/hooks/useToast";
 import { ROUTES } from "@/constants/routes";
 import { Icon } from "@/components/ui/Icon";
-import { uploadAudio } from "@/lib/api/classroom";
 import { setTeacherAudioStream } from "@/lib/rtc/audioBridge";
 import { classroomSocket } from "@/lib/ws/classroomSocket";
 import { registerTeacherMicStream } from "@/lib/media/classroomMedia";
 
-const STT_SEGMENT_MS = 4500;
-const MIN_STT_BLOB_BYTES = 12_000;
 const VOICE_ACTIVITY_THRESHOLD = 0.08;
 
 export function ClassControlsBar() {
@@ -24,7 +21,6 @@ export function ClassControlsBar() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserFrameRef = useRef<number | null>(null);
   const segmentTimerRef = useRef<number | null>(null);
-  const uploadInFlightRef = useRef(false);
   const sttChunksRef = useRef<Blob[]>([]);
   const segmentHadVoiceRef = useRef(false);
   const lastSpeakingSignalAtRef = useRef(0);
@@ -38,10 +34,8 @@ export function ClassControlsBar() {
 
   useEffect(() => {
     if (!isTeacherApiSession || !sessionId) return;
-    const activeSessionId = sessionId;
 
     let cancelled = false;
-    let shouldContinueRecording = false;
 
     async function startMicrophone() {
       if (!audioEnabled || recorderRef.current) return;
@@ -88,10 +82,6 @@ export function ClassControlsBar() {
         };
         readLevel();
 
-        const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-          ? "audio/webm;codecs=opus"
-          : "audio/webm";
-
         const publishTranscript = (text: string) => {
           pushSubtitle(text);
           classroomSocket.send({
@@ -105,75 +95,42 @@ export function ClassControlsBar() {
           });
         };
 
-        const uploadSegment = (blob: Blob) => {
-          if (uploadInFlightRef.current) {
-            console.info("[STT] Segmento omitido: hay otra transcripción en curso");
-            return;
-          }
+        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+        let recognition: any = null;
 
-          uploadInFlightRef.current = true;
-          uploadAudio(activeSessionId, blob)
-            .then((result) => {
-              if (!result.transcript) {
-                console.warn("[STT] Sin transcripción útil", result);
-                return;
+        if (SpeechRecognition) {
+          recognition = new SpeechRecognition();
+          recognition.continuous = true;
+          recognition.interimResults = false;
+          recognition.lang = "es-PE";
+          
+          recognition.onresult = (event: any) => {
+            let finalTranscript = '';
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+              if (event.results[i].isFinal) {
+                finalTranscript += event.results[i][0].transcript;
               }
-              publishTranscript(result.transcript);
-            })
-            .catch((err) => {
-              console.error("[STT] Error al subir audio:", err);
-            })
-            .finally(() => {
-              uploadInFlightRef.current = false;
-            });
-        };
+            }
+            if (finalTranscript.trim()) {
+              publishTranscript(finalTranscript.trim());
+            }
+          };
+          
+          recognition.onend = () => {
+            if (!cancelled && audioEnabled) {
+              try { recognition.start(); } catch {}
+            }
+          };
 
-        const startSegment = () => {
-          if (cancelled || !shouldContinueRecording || !micStreamRef.current) return;
-          if (!micStreamRef.current.getAudioTracks().some((track) => track.readyState === "live")) {
-            return;
+          try {
+            recognition.start();
+          } catch (e) {
+            console.error("SpeechRecognition error:", e);
           }
-
-          sttChunksRef.current = [];
-          segmentHadVoiceRef.current = false;
-          const recorder = new MediaRecorder(micStreamRef.current, { mimeType });
-          recorderRef.current = recorder;
-
-          recorder.ondataavailable = (event) => {
-            if (event.data.size) {
-              sttChunksRef.current.push(event.data);
-            }
-          };
-
-          recorder.onstop = () => {
-            const blob = new Blob(sttChunksRef.current, { type: mimeType });
-            sttChunksRef.current = [];
-            recorderRef.current = null;
-
-            const hasEnoughAudio = blob.size >= MIN_STT_BLOB_BYTES || segmentHadVoiceRef.current;
-            if (hasEnoughAudio) {
-              uploadSegment(blob);
-            } else {
-              console.info("[STT] Segmento omitido: silencio o audio demasiado corto", {
-                bytes: blob.size,
-              });
-            }
-
-            if (!cancelled && shouldContinueRecording) {
-              window.setTimeout(startSegment, 250);
-            }
-          };
-
-          recorder.start();
-          segmentTimerRef.current = window.setTimeout(() => {
-            if (recorder.state === "recording") {
-              recorder.stop();
-            }
-          }, STT_SEGMENT_MS);
-        };
-
-        shouldContinueRecording = true;
-        startSegment();
+        }
+        
+        // Save recognition to ref to stop it later
+        (micStreamRef as any).recognition = recognition;
       } catch {
         if (audioEnabled) {
           toggleMedia("audio");
@@ -182,7 +139,6 @@ export function ClassControlsBar() {
     }
 
     function stopMicrophone() {
-      shouldContinueRecording = false;
       if (analyserFrameRef.current) {
         cancelAnimationFrame(analyserFrameRef.current);
         analyserFrameRef.current = null;
@@ -198,10 +154,14 @@ export function ClassControlsBar() {
       lastSpeakingSignalAtRef.current = 0;
       classroomSocket.send({ type: "teacher_speaking", payload: { active: false } });
       setVoiceLevel(0);
-      if (recorderRef.current?.state === "recording") {
-        recorderRef.current.stop();
+      if ((micStreamRef as any).recognition) {
+        try {
+          (micStreamRef as any).recognition.onend = null;
+          (micStreamRef as any).recognition.stop();
+        } catch {}
+        (micStreamRef as any).recognition = null;
       }
-      recorderRef.current = null;
+      
       sttChunksRef.current = [];
       micStreamRef.current?.getTracks().forEach((track) => track.stop());
       micStreamRef.current = null;
@@ -272,11 +232,12 @@ export function ClassControlsBar() {
           onClick={toggleBoardCamera}
         />
         <MediaToggle
-          icon="screen_share"
-          label="Compartir Pantalla"
+          icon="stop_screen_share"
+          offIcon="screen_share"
+          label={session.media.screenShare ? "Dejar de compartir" : "Compartir Pantalla"}
           active={session.media.screenShare}
           onClick={() => toggleMedia("screenShare")}
-          hideLabel
+          hideLabel={!session.media.screenShare}
         />
       </div>
 

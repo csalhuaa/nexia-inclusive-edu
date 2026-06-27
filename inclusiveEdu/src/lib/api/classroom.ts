@@ -45,7 +45,10 @@ export async function uploadScreenshot(classroomId: string, blob: Blob, force = 
   const extension = blob.type.includes("jpeg") ? "jpg" : "png";
   formData.append("file", blob, `board.${extension}`);
 
-  const url = new URL(`${env.apiUrl}${API_ENDPOINTS.screenshots(classroomId)}`);
+  const url = new URL(
+    `${env.apiUrl}${API_ENDPOINTS.screenshots(classroomId)}`,
+    typeof window !== "undefined" ? window.location.origin : undefined
+  );
   if (force) url.searchParams.set("force", "true");
 
   const response = await fetch(url.toString(), {
@@ -59,6 +62,7 @@ export async function uploadScreenshot(classroomId: string, blob: Blob, force = 
 
   return response.json() as Promise<{
     explanation: string | null;
+    full_text: string | null;
     duplicate: boolean;
     rateLimited?: boolean;
   }>;

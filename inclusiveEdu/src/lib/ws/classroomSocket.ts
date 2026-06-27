@@ -28,14 +28,20 @@ export class ClassroomSocket {
     if (event.type === "screen.explanation.ready" || event.type === "screenshot.processed") {
       return {
         type: "caption",
-        payload: String(event.payload?.explanation ?? event.payload?.text ?? ""),
+        payload: {
+          explanation: String(event.payload?.explanation ?? event.payload?.text ?? ""),
+          full_text: event.payload?.full_text ? String(event.payload.full_text) : "",
+        },
       };
     }
 
     if (event.type === "tts") {
       return {
         type: "caption",
-        payload: String(event.payload?.text ?? ""),
+        payload: {
+          explanation: String(event.payload?.text ?? ""),
+          full_text: String(event.payload?.text ?? ""),
+        },
       };
     }
 

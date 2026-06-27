@@ -217,9 +217,17 @@ export function TeacherCameraPanel({ large = false }: TeacherCameraPanelProps) {
             type="button"
             aria-label={audio ? "Silenciar micrófono" : "Activar micrófono"}
             onClick={() => toggleMedia("audio")}
-            className="rounded-full bg-surface/90 p-1.5 backdrop-blur-sm"
+            className="rounded-full bg-surface/90 p-1.5 backdrop-blur-sm shadow-sm transition-colors hover:bg-surface"
           >
-            <Icon name={audio ? "mic" : "mic_off"} size={16} className={audio ? "text-secondary" : "text-error"} />
+            <Icon name={audio ? "mic" : "mic_off"} size={16} className={audio ? "text-on-surface" : "text-error"} />
+          </button>
+          <button
+            type="button"
+            aria-label={video ? "Desactivar cámara" : "Activar cámara"}
+            onClick={() => toggleMedia("video")}
+            className="rounded-full bg-surface/90 p-1.5 backdrop-blur-sm shadow-sm transition-colors hover:bg-surface"
+          >
+            <Icon name={video ? "videocam" : "videocam_off"} size={16} className={video ? "text-on-surface" : "text-error"} />
           </button>
         </div>
       </div>

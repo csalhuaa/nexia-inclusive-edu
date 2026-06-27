@@ -9,7 +9,7 @@ export function LiveSubtitlesPanel() {
 
   const subtitles = session?.subtitles ?? [];
   const currentLine = subtitles.at(-1)?.text ?? "";
-  const history = subtitles.slice(-12, -1);
+  const history = subtitles.slice(0, -1);
   const speed = session?.subtitleSpeed ?? 1;
 
   useEffect(() => {
@@ -63,7 +63,8 @@ export function LiveSubtitlesPanel() {
         </div>
       </header>
 
-      <div ref={scrollRef} className="flex flex-1 flex-col justify-end gap-3 overflow-y-auto bg-surface-container-lowest p-4">
+      <div ref={scrollRef} className="flex flex-1 flex-col gap-3 overflow-y-auto overflow-x-hidden bg-surface-container-lowest p-4">
+        <div className="mt-auto flex flex-col gap-3">
         {history.map((entry) => (
           <article
             key={entry.id}
@@ -72,7 +73,7 @@ export function LiveSubtitlesPanel() {
             <p className="font-body text-[11px] font-semibold text-on-surface-variant">
               {new Date(entry.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
             </p>
-            <p className="mt-1 font-body text-label-sm leading-relaxed text-on-surface-variant">
+            <p className="mt-1 font-body text-label-sm leading-relaxed text-on-surface-variant break-words">
               {entry.text}
             </p>
           </article>
@@ -87,12 +88,12 @@ export function LiveSubtitlesPanel() {
             <p className="mb-1 font-body text-[11px] font-semibold text-on-primary-fixed-variant">
               Subtítulo actual
             </p>
-            <p className={cn("font-headline text-body-lg leading-snug text-on-primary-fixed")}>
+            <p className={cn("font-headline text-body-lg leading-snug text-on-primary-fixed break-words")}>
             {currentLine.split(" ").map((word, i, arr) => (
               <span
                 key={`${entryWordKey(word, i)}`}
                 className={cn(
-                  "mr-1.5 inline",
+                  "mr-1.5 inline-block",
                   i >= arr.length - 3 ? "text-primary font-bold" : "",
                 )}
               >
@@ -112,6 +113,7 @@ export function LiveSubtitlesPanel() {
             </p>
           </div>
         )}
+        </div>
       </div>
     </section>
   );

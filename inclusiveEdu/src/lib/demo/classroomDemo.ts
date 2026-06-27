@@ -101,6 +101,7 @@ export function createDemoSession(title = "Sesión de hoy"): ClassroomSession {
     media: { audio: true, video: true, screenShare: false, boardCamera: false },
     subtitles: [],
     currentCaption: DEMO_CAPTIONS[0],
+    currentFullText: "Texto completo detectado en la demostración: " + DEMO_CAPTIONS[0],
     interpreterActive: true,
     connectionMode: "demo",
     subtitleSpeed: 1,
