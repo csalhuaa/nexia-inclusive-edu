@@ -7,18 +7,22 @@ export type NavItem = {
 };
 
 export const CLASSROOM_NAV: NavItem[] = [
-  { label: "Docente", to: ROUTES.teacher, ariaLabel: "Vista Docente" },
-  { label: "Estudiante Sordo", to: ROUTES.deafStudent, ariaLabel: "Vista Estudiante Sordo" },
-  { label: "Estudiante Ciego", to: ROUTES.blindStudent, ariaLabel: "Vista Estudiante Ciego" },
+  { label: "Inicio", to: ROUTES.home, ariaLabel: "Ir al inicio" },
+  { label: "Crear sesión", to: ROUTES.createSession, ariaLabel: "Crear una sesión" },
+  { label: "Unirse a sesión", to: ROUTES.joinSession, ariaLabel: "Unirse a una sesión" },
+  { label: "FAQ", to: `${ROUTES.home}#faq`, ariaLabel: "Ir a preguntas frecuentes" },
 ];
 
 export const HOME_NAV: NavItem[] = [
-  { label: "¿Qué somos?", to: "#", ariaLabel: "Acerca de nosotros" },
-  { label: "FAQ", to: "#", ariaLabel: "Preguntas frecuentes" },
+  { label: "Inicio", to: ROUTES.home, ariaLabel: "Ir al inicio" },
+  { label: "Crear sesión", to: ROUTES.createSession, ariaLabel: "Crear una sesión" },
+  { label: "Unirse a sesión", to: ROUTES.joinSession, ariaLabel: "Unirse a una sesión" },
+  { label: "FAQ", to: `${ROUTES.home}#faq`, ariaLabel: "Ir a preguntas frecuentes" },
 ];
 
 export const FOOTER_LINKS: NavItem[] = [
-  { label: "FAQ", to: "#", ariaLabel: "Ir a Preguntas Frecuentes" },
-  { label: "Accessibility Settings", to: "#", ariaLabel: "Ir a Configuración de Accesibilidad" },
-  { label: "Support", to: "#", ariaLabel: "Ir a Soporte" },
+  { label: "Inicio", to: ROUTES.home, ariaLabel: "Ir al inicio" },
+  { label: "Crear sesión", to: ROUTES.createSession, ariaLabel: "Crear una sesión" },
+  { label: "Unirse a sesión", to: ROUTES.joinSession, ariaLabel: "Unirse a una sesión" },
+  { label: "FAQ", to: `${ROUTES.home}#faq`, ariaLabel: "Ir a preguntas frecuentes" },
 ];

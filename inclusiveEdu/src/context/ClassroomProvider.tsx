@@ -21,13 +21,17 @@ import {
   announceStudentAudioReady,
   enableStudentAudio,
   handleRtcEvent,
+  isTeacherAudioActive,
   setAudioBlockedHandler,
+  stopTeacherAudioBroadcast,
   stopStudentAudio,
 } from "@/lib/rtc/audioBridge";
+import { stopAllClassroomMedia } from "@/lib/media/classroomMedia";
 import type {
   ClassroomSession,
   ConnectionMode,
   MediaState,
+  Participant,
   ScreenFramePayload,
   SubtitleEntry,
   UserRole,
@@ -35,6 +39,8 @@ import type {
 import type { SignGlossPayload } from "@/features/deaf-student/types/signEvents";
 
 type ToastFn = (message: string, type?: "info" | "success" | "error") => void;
+const PARTICIPANT_STALE_MS = 35_000;
+type ParticipantRoleAlias = UserRole | "deaf" | "blind";
 
 function applySessionPatch(
   session: ClassroomSession,
@@ -121,6 +127,96 @@ function buildSimulatedSignGloss(text: string): SignGlossPayload {
   };
 }
 
+function getPresenceId() {
+  const key = "inclusiveedu.presenceId";
+  const existing = window.sessionStorage.getItem(key);
+  if (existing) return existing;
+  const next = crypto.randomUUID();
+  window.sessionStorage.setItem(key, next);
+  return next;
+}
+
+function normalizeParticipantRole(role: ParticipantRoleAlias | string | null | undefined): UserRole {
+  if (role === "blind" || role === "blind-student") return "blind-student";
+  if (role === "deaf" || role === "deaf-student") return "deaf-student";
+  return "teacher";
+}
+
+function fallbackParticipantName(role: UserRole): string {
+  if (role === "blind-student") return "Estudiante ciego";
+  if (role === "deaf-student") return "Estudiante sordo";
+  return "Docente";
+}
+
+function looksLikeGeneratedId(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
+}
+
+function normalizeParticipant(participant: Participant): Participant {
+  const role = normalizeParticipantRole(participant.role);
+  const clientId = participant.clientId?.trim() || participant.id;
+  const displayName = participant.displayName?.trim();
+  const rawName = participant.name?.trim();
+  const name =
+    displayName ||
+    (rawName && !looksLikeGeneratedId(rawName) ? rawName : fallbackParticipantName(role));
+  const accessibility =
+    participant.accessibility ??
+    (role === "blind-student" ? "blind" : role === "deaf-student" ? "deaf" : "none");
+
+  return {
+    ...participant,
+    clientId,
+    name,
+    displayName: displayName || undefined,
+    role,
+    accessibility,
+  };
+}
+
+function buildParticipantPresence(session: ClassroomSession, displayName?: string): Participant {
+  const role = normalizeParticipantRole(session.role);
+  const accessibility =
+    role === "blind-student" ? "blind" : role === "deaf-student" ? "deaf" : "none";
+  const name = displayName?.trim() || fallbackParticipantName(role);
+  const clientId = getPresenceId();
+
+  return {
+    id: clientId,
+    clientId,
+    name,
+    displayName: displayName?.trim() || undefined,
+    role,
+    accessibility,
+    isOnline: true,
+    lastSeenAt: Date.now(),
+  };
+}
+
+function uniqueParticipants(participants: Participant[]): Participant[] {
+  return Array.from(
+    new Map(participants.map((participant) => [participant.clientId ?? participant.id, participant])).values(),
+  );
+}
+
+function participantsAreEqual(left: Participant[], right: Participant[]): boolean {
+  if (left.length !== right.length) return false;
+  return left.every((participant, index) => {
+    const other = right[index];
+    return (
+      other &&
+      participant.id === other.id &&
+      participant.clientId === other.clientId &&
+      participant.name === other.name &&
+      participant.role === other.role &&
+      participant.accessibility === other.accessibility &&
+      participant.isOnline === other.isOnline
+    );
+  });
+}
+
 type ClassroomProviderProps = {
   children: ReactNode;
   onToast?: ToastFn;
@@ -132,6 +228,7 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
   const [apiAvailable, setApiAvailable] = useState<boolean | null>(null);
   const [isRecordingQuestion, setIsRecordingQuestion] = useState(false);
   const [teacherAudioBlocked, setTeacherAudioBlocked] = useState(false);
+  const [teacherIsSpeaking, setTeacherIsSpeaking] = useState(false);
   const [latestSignGloss, setLatestSignGloss] = useState<SignGlossPayload | null>(null);
   const [latestScreenFrame, setLatestScreenFrame] = useState<ScreenFramePayload | null>(null);
 
@@ -139,9 +236,11 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
   const captionIndexRef = useRef(0);
   const simulationRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const sessionRef = useRef<ClassroomSession | null>(null);
+  const displayNameRef = useRef<string | undefined>(undefined);
   const lastNarrationAtRef = useRef(0);
   const pendingNarrationRef = useRef<string | null>(null);
   const narrationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const teacherSpeakingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     sessionRef.current = session;
@@ -174,6 +273,7 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
 
   const stopTeacherAudio = useCallback(() => {
     stopStudentAudio();
+    stopTeacherAudioBroadcast();
   }, []);
 
   const enableTeacherAudio = useCallback(() => {
@@ -209,6 +309,24 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
     setLatestSignGloss(payload);
   }, []);
 
+  const markTeacherSpeaking = useCallback((active = true) => {
+    if (teacherSpeakingTimerRef.current) {
+      clearTimeout(teacherSpeakingTimerRef.current);
+      teacherSpeakingTimerRef.current = null;
+    }
+
+    if (!active) {
+      setTeacherIsSpeaking(false);
+      return;
+    }
+
+    setTeacherIsSpeaking(true);
+    teacherSpeakingTimerRef.current = setTimeout(() => {
+      setTeacherIsSpeaking(false);
+      teacherSpeakingTimerRef.current = null;
+    }, 2000);
+  }, []);
+
   const speakNow = useCallback((text: string, interrupt = false) => {
     if (!text || !("speechSynthesis" in window)) return;
     const spokenText = sanitizeNarrationText(text);
@@ -221,6 +339,7 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
     utterance.lang = "es-PE";
     utterance.voice = getSpanishVoice();
     utterance.rate = sessionRef.current?.subtitleSpeed ?? 1;
+    utterance.volume = isTeacherAudioActive() ? 0.55 : 0.92;
     window.speechSynthesis.speak(utterance);
     lastNarrationAtRef.current = Date.now();
   }, []);
@@ -261,11 +380,21 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
   }, [stopNarration]);
 
   useEffect(() => {
+    return () => {
+      if (teacherSpeakingTimerRef.current) {
+        clearTimeout(teacherSpeakingTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     if (session?.status === "ended") {
       stopNarration();
     }
     if (session?.role !== "blind-student") {
       stopNarration();
+    }
+    if (session?.role !== "blind-student" && session?.role !== "deaf-student") {
       stopTeacherAudio();
     }
     if (session?.status === "ended") {
@@ -274,7 +403,10 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
   }, [session?.role, session?.status, stopNarration, stopTeacherAudio]);
 
   useEffect(() => {
-    if (session?.role === "blind-student" && session.status === "live") {
+    if (
+      (session?.role === "blind-student" || session?.role === "deaf-student") &&
+      session.status === "live"
+    ) {
       announceStudentAudioReady();
       const cleanup = classroomSocket.onOpen(() => announceStudentAudioReady());
       const retry = window.setInterval(() => announceStudentAudioReady(), 3000);
@@ -287,6 +419,49 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
     }
     return undefined;
   }, [session?.role, session?.status]);
+
+  useEffect(() => {
+    if (!session || session.status !== "live" || session.role === "teacher") return undefined;
+
+    const sendPresence = (isOnline = true) => {
+      const currentSession = sessionRef.current;
+      if (!currentSession || currentSession.status !== "live" || currentSession.role === "teacher") {
+        return;
+      }
+      const participant = buildParticipantPresence(currentSession, displayNameRef.current);
+      classroomSocket.send({
+        type: "participant",
+        payload: { ...participant, isOnline, lastSeenAt: Date.now() },
+      });
+    };
+
+    sendPresence(true);
+    const timer = window.setInterval(() => sendPresence(true), 10_000);
+    return () => {
+      window.clearInterval(timer);
+      sendPresence(false);
+    };
+  }, [session?.id, session?.role, session?.status]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setSession((prev) => {
+        if (!prev || prev.role !== "teacher") return prev;
+        const now = Date.now();
+        const participants = uniqueParticipants(
+          prev.participants.filter(
+            (participant) =>
+              participant.role === "teacher" ||
+              (participant.isOnline && now - (participant.lastSeenAt ?? now) < PARTICIPANT_STALE_MS),
+          ),
+        );
+        return participantsAreEqual(participants, prev.participants)
+          ? prev
+          : applySessionPatch(prev, { participants });
+      });
+    }, 5_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const startSimulation = useCallback(
     (mode: ConnectionMode) => {
@@ -317,14 +492,19 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
 	        (event) => {
 	          void handleRtcEvent(event, sessionRef.current?.role ?? null);
 	          if (event.type === "subtitle") {
+              markTeacherSpeaking(true);
 	            pushSubtitle(event.payload.text, event.payload.isFinal);
 	            if (sessionRef.current?.role === "deaf-student") {
 	              setLatestSignGloss(buildSimulatedSignGloss(event.payload.text));
 	            }
 	          }
 	          if (event.type === "sign_gloss") {
+              markTeacherSpeaking(true);
 	            setLatestSignGloss(event.payload);
 	          }
+          if (event.type === "teacher_speaking") {
+            markTeacherSpeaking(event.payload.active);
+          }
           if (event.type === "caption") {
             setCaption(event.payload);
             if (sessionRef.current?.role === "blind-student") {
@@ -334,10 +514,34 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
           if (event.type === "participant") {
             setSession((prev) => {
               if (!prev) return prev;
-              const exists = prev.participants.some((p) => p.id === event.payload.id);
-              const participants = exists
-                ? prev.participants.map((p) => (p.id === event.payload.id ? event.payload : p))
-                : [...prev.participants, event.payload];
+              const payload = normalizeParticipant({
+                ...event.payload,
+                lastSeenAt: event.payload.lastSeenAt ?? Date.now(),
+              });
+              if (!event.payload.isOnline) {
+                const leavingKey = payload.clientId ?? payload.id;
+                const participants = prev.participants.filter(
+                  (p) => (p.clientId ?? p.id) !== leavingKey,
+                );
+                return participantsAreEqual(participants, prev.participants)
+                  ? prev
+                  : applySessionPatch(prev, { participants });
+              }
+              const payloadKey = payload.clientId ?? payload.id;
+              const current = prev.participants.find((p) => (p.clientId ?? p.id) === payloadKey);
+              if (
+                current &&
+                current.name === payload.name &&
+                current.role === payload.role &&
+                current.accessibility === payload.accessibility &&
+                current.isOnline === payload.isOnline &&
+                Date.now() - (current.lastSeenAt ?? 0) < 20_000
+              ) {
+                return prev;
+              }
+              const participants = uniqueParticipants(current
+                ? prev.participants.map((p) => ((p.clientId ?? p.id) === payloadKey ? payload : p))
+                : [...prev.participants, payload]);
               return applySessionPatch(prev, { participants });
             });
           }
@@ -350,17 +554,45 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
             setSession((prev) => (prev ? applySessionPatch(prev, { media: event.payload }) : prev));
           }
           if (event.type === "screen_frame") {
-            setLatestScreenFrame(event.payload);
+            setLatestScreenFrame(event.payload.data ? event.payload : null);
           }
-          if (event.type === "session_end") {
-            setSession((prev) => (prev ? applySessionPatch(prev, { status: "ended" }) : prev));
+          if (event.type === "screen_share_stopped") {
+            setLatestScreenFrame(null);
+            setSession((prev) =>
+              prev
+                ? applySessionPatch(prev, {
+                    media: { ...prev.media, screenShare: false },
+                  })
+                : prev,
+            );
+          }
+          if (event.type === "session_end" || event.type === "class_ended") {
+            stopSimulation();
+            stopNarration();
+            stopTeacherAudio();
+            stopAllClassroomMedia();
+            setLatestScreenFrame(null);
+            setTeacherIsSpeaking(false);
+            setSession((prev) =>
+              prev
+                ? applySessionPatch(prev, {
+                    status: "ended",
+                    media: {
+                      audio: false,
+                      video: false,
+                      screenShare: false,
+                      boardCamera: false,
+                    },
+                  })
+                : prev,
+            );
             toast("La clase ha finalizado", "info");
           }
         },
         () => toast("Conexión en tiempo real interrumpida", "error"),
       );
     },
-    [pushSubtitle, queueBoardNarration, setCaption, toast],
+    [markTeacherSpeaking, pushSubtitle, queueBoardNarration, setCaption, stopNarration, stopSimulation, stopTeacherAudio, toast],
   );
 
   useEffect(() => {
@@ -380,6 +612,8 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
       });
       setSession(hydrated);
       setLatestScreenFrame(null);
+      setLatestSignGloss(null);
+      setTeacherIsSpeaking(false);
       pushSubtitle("Clase iniciada — los subtítulos aparecerán aquí");
       startSimulation(mode);
       connectRealtime(hydrated.id, mode);
@@ -388,8 +622,9 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
   );
 
   const createSessionHandler = useCallback(
-    async (title = "Clase de Matemáticas") => {
+    async (title = "Sesión de hoy") => {
       setIsLoading(true);
+      displayNameRef.current = undefined;
       try {
         if (apiAvailable) {
           const created = await createClassroom({ title });
@@ -421,9 +656,10 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
       }
 
       setIsLoading(true);
+      displayNameRef.current = displayName?.trim() || undefined;
       try {
         if (apiAvailable) {
-          const joined = await joinClassroom({ code, role, displayName });
+          const joined = await joinClassroom({ code, role, displayName, clientId: getPresenceId() });
           activateSession({ ...joined, role }, "api");
           toast("Te has unido a la clase", "success");
           return true;
@@ -437,7 +673,7 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
         setIsLoading(false);
       }
 
-      const demo = createDemoSession("Biología Celular — Lección 4");
+      const demo = createDemoSession("Sesión de hoy");
       activateSession({ ...demo, code: code.toUpperCase(), role }, "demo");
       toast("Modo demostración — simulación en vivo activa", "info");
       return true;
@@ -445,14 +681,74 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
     [activateSession, apiAvailable, toast],
   );
 
-  const endSession = useCallback(() => {
+  const leaveClassroom = useCallback(() => {
+    const currentSession = sessionRef.current;
+    if (currentSession && currentSession.role !== "teacher") {
+      const participant = buildParticipantPresence(currentSession, displayNameRef.current);
+      classroomSocket.send({
+        type: "participant",
+        payload: { ...participant, isOnline: false, lastSeenAt: Date.now() },
+      });
+    }
+
     stopSimulation();
     stopNarration();
     stopTeacherAudio();
+    stopAllClassroomMedia();
     classroomSocket.disconnect();
-    setSession((prev) => (prev ? applySessionPatch(prev, { status: "ended" }) : prev));
+    setLatestScreenFrame(null);
+    setLatestSignGloss(null);
+    setTeacherIsSpeaking(false);
+    displayNameRef.current = undefined;
+    setSession(null);
+    toast("Saliste de la clase", "info");
+  }, [stopNarration, stopSimulation, stopTeacherAudio, toast]);
+
+  const endClassroom = useCallback(() => {
+    classroomSocket.send({ type: "screen_share_stopped" });
+    classroomSocket.send({
+      type: "media",
+      payload: {
+        audio: false,
+        video: false,
+        screenShare: false,
+        boardCamera: false,
+      },
+    });
+    classroomSocket.send({ type: "teacher_speaking", payload: { active: false } });
+    classroomSocket.send({ type: "class_ended" });
+    stopSimulation();
+    stopNarration();
+    stopTeacherAudio();
+    stopAllClassroomMedia();
+    classroomSocket.disconnect();
+    setLatestScreenFrame(null);
+    setLatestSignGloss(null);
+    setTeacherIsSpeaking(false);
+    displayNameRef.current = undefined;
+    setSession((prev) =>
+      prev
+        ? applySessionPatch(prev, {
+            status: "ended",
+            media: {
+              audio: false,
+              video: false,
+              screenShare: false,
+              boardCamera: false,
+            },
+          })
+        : prev,
+    );
     toast("Clase finalizada", "info");
   }, [stopNarration, stopSimulation, stopTeacherAudio, toast]);
+
+  const endSession = useCallback(() => {
+    if (sessionRef.current?.role === "teacher") {
+      endClassroom();
+      return;
+    }
+    leaveClassroom();
+  }, [endClassroom, leaveClassroom]);
 
   const toggleMedia = useCallback((key: keyof MediaState) => {
     setSession((prev) => {
@@ -545,6 +841,8 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
       createSession: createSessionHandler,
       joinSession: joinSessionHandler,
       endSession,
+      leaveClassroom,
+      endClassroom,
       toggleMedia,
       nextSlide,
       prevSlide,
@@ -554,6 +852,7 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
       speakCaption,
       enableTeacherAudio,
       teacherAudioBlocked,
+      teacherIsSpeaking,
       latestSignGloss,
       setSignGloss,
       downloadSummary,
@@ -569,6 +868,8 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
       createSessionHandler,
       joinSessionHandler,
       endSession,
+      leaveClassroom,
+      endClassroom,
       toggleMedia,
       nextSlide,
       prevSlide,
@@ -578,6 +879,7 @@ export function ClassroomProvider({ children, onToast }: ClassroomProviderProps)
       speakCaption,
       enableTeacherAudio,
       teacherAudioBlocked,
+      teacherIsSpeaking,
       latestSignGloss,
       setSignGloss,
       downloadSummary,

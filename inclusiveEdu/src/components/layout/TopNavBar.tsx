@@ -14,15 +14,16 @@ function NavLinks({ items, activePath }: { items: NavItem[]; activePath: string 
   return (
     <nav aria-label="Navegación principal" className="hidden items-center gap-6 lg:flex">
       {items.map((item) => {
-        const isActive = item.to !== "#" && activePath === item.to;
+        const isHashLink = item.to.includes("#");
+        const isActive = !isHashLink && activePath === item.to;
 
-        if (item.to === "#") {
+        if (isHashLink) {
           return (
             <a
               key={item.label}
               href={item.to}
               aria-label={item.ariaLabel}
-              className="rounded-md px-3 py-2 font-body text-body-md font-medium text-on-primary/80 transition-colors hover:bg-primary-container/20"
+            className="rounded-full px-3 py-2 font-body text-label-lg font-medium text-on-surface-variant transition-colors hover:bg-primary-fixed/70 hover:text-primary"
             >
               {item.label}
             </a>
@@ -36,10 +37,10 @@ function NavLinks({ items, activePath }: { items: NavItem[]; activePath: string 
             aria-label={item.ariaLabel}
             aria-current={isActive ? "page" : undefined}
             className={cn(
-              "px-2 py-1 font-body text-body-md transition-colors",
+              "rounded-full px-3 py-2 font-body text-label-lg transition-colors",
               isActive
-                ? "border-b-4 border-on-primary pb-1 font-bold text-on-primary"
-                : "font-medium text-on-primary/80 hover:bg-primary-container/20",
+                ? "bg-primary text-on-primary shadow-sm"
+                : "font-medium text-on-surface-variant hover:bg-primary-fixed/70 hover:text-primary",
             )}
           >
             {item.label}
@@ -60,28 +61,37 @@ function ClassroomRoleLabel({ role }: { role: string | null }) {
 export function TopNavBar({ variant = "classroom" }: TopNavBarProps) {
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const { session, endSession } = useClassroom();
+  const { session, leaveClassroom, endClassroom } = useClassroom();
   const navItems = variant === "home" ? HOME_NAV : CLASSROOM_NAV;
 
   const handleLeave = () => {
-    endSession();
+    if (session?.role === "teacher") {
+      endClassroom();
+    } else {
+      leaveClassroom();
+    }
     navigate(ROUTES.home);
   };
 
   return (
-    <header className="sticky top-0 z-50 flex w-full items-center justify-between bg-primary px-gutter py-unit shadow-md">
+    <header className="sticky top-0 z-50 flex w-full items-center justify-between border-b border-outline-variant/70 bg-white/85 px-gutter py-3 shadow-[0_8px_28px_rgba(18,32,51,0.08)] backdrop-blur-xl">
       <div className="flex min-w-0 items-center gap-4 md:gap-6">
         <NavLink
           to={ROUTES.home}
-          className="shrink-0 font-headline text-headline-md font-bold text-on-primary"
+          className="flex shrink-0 items-center gap-3 font-headline text-headline-md font-bold text-on-surface"
           aria-label="Inclusive EDU — Inicio"
         >
-          Inclusive EDU
+          <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary text-on-primary shadow-[0_10px_24px_rgba(37,72,199,0.2)]">
+            <Icon name="diversity_3" size={22} />
+          </span>
+          <span>
+            Inclusive <span className="text-primary">EDU</span>
+          </span>
         </NavLink>
         {variant === "classroom" && (
           <div className="hidden md:block">
             {session ? (
-              <span className="rounded-full bg-primary-container/20 px-3 py-2 font-body text-body-md font-medium text-on-primary/90">
+              <span className="rounded-full border border-primary/20 bg-primary-fixed/70 px-3 py-2 font-body text-label-lg font-semibold text-on-primary-fixed">
                 <ClassroomRoleLabel role={session.role} />
               </span>
             ) : (
@@ -90,9 +100,6 @@ export function TopNavBar({ variant = "classroom" }: TopNavBarProps) {
           </div>
         )}
       </div>
-
-      {variant === "home" && <NavLinks items={navItems} activePath={pathname} />}
-
       <div className="flex items-center gap-2">
         {variant === "classroom" && session && (
           <div className="mr-2 hidden sm:block">
@@ -103,27 +110,14 @@ export function TopNavBar({ variant = "classroom" }: TopNavBarProps) {
           <button
             type="button"
             onClick={handleLeave}
-            aria-label="Salir de la clase"
-            className="hidden items-center gap-1 rounded-lg px-3 py-2 font-body text-label-sm text-on-primary/90 transition-colors hover:bg-primary-container/20 md:flex"
+            aria-label={session.role === "teacher" ? "Finalizar clase" : "Salir de la clase"}
+            className="hidden items-center gap-1 rounded-xl px-3 py-2 font-body text-label-sm text-on-surface-variant transition-colors hover:bg-error-container hover:text-on-error-container md:flex"
           >
             <Icon name="logout" size={18} />
-            Salir
+            {session.role === "teacher" ? "Finalizar" : "Salir"}
           </button>
         )}
-        <button
-          type="button"
-          aria-label="Configuración"
-          className="flex min-h-touch-target-min min-w-touch-target-min items-center justify-center rounded-full p-2 text-on-primary transition-colors hover:bg-primary-container/20 focus-visible:ring-3 focus-visible:ring-secondary focus-visible:ring-offset-2"
-        >
-          <Icon name="settings" />
-        </button>
-        <button
-          type="button"
-          aria-label="Perfil de usuario"
-          className="flex min-h-touch-target-min min-w-touch-target-min items-center justify-center rounded-full p-2 text-on-primary transition-colors hover:bg-primary-container/20 focus-visible:ring-3 focus-visible:ring-secondary focus-visible:ring-offset-2"
-        >
-          <Icon name="account_circle" filled />
-        </button>
+        {variant === "home" && <NavLinks items={navItems} activePath={pathname} />}
       </div>
     </header>
   );

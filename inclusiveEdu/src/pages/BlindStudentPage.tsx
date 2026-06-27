@@ -1,15 +1,29 @@
+import { useEffect } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { SessionBar } from "@/components/classroom/SessionBar";
 import { PageLoader } from "@/components/classroom/SessionWidgets";
+import { SessionEndedNotice } from "@/components/classroom/SessionEndedNotice";
 import { Footer } from "@/components/layout/Footer";
 import { TopNavBar } from "@/components/layout/TopNavBar";
 import { AudioStatusBar } from "@/features/blind-student/AudioStatusBar";
 import { ClassActionButtons } from "@/features/blind-student/ClassActionButtons";
 import { LiveCaptionPanel } from "@/features/blind-student/LiveCaptionPanel";
+import { useClassroom } from "@/hooks/useClassroom";
 import { useSessionGuard } from "@/hooks/useSessionGuard";
 
 export function BlindStudentPage() {
   const { isReady, isLoading } = useSessionGuard({ role: "blind-student", autoCreate: false });
+  const { session } = useClassroom();
+
+  useEffect(() => {
+    if (session?.status !== "ended" || !("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(
+      "La sesión ha terminado. Puedes volver al inicio.",
+    );
+    utterance.lang = "es-PE";
+    window.speechSynthesis.speak(utterance);
+  }, [session?.status]);
 
   return (
     <AppLayout>
@@ -18,6 +32,8 @@ export function BlindStudentPage() {
 
       {!isReady || isLoading ? (
         <PageLoader label="Conectando a la clase…" />
+      ) : session?.status === "ended" ? (
+        <SessionEndedNotice message="La sesión ha terminado. Puedes volver al inicio para unirte a otra clase." />
       ) : (
         <main
           id="main-content"

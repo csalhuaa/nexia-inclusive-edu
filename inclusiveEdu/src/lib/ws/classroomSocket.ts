@@ -43,11 +43,20 @@ export class ClassroomSocket {
       const role = String(event.payload?.role ?? "deaf") as "teacher" | "blind" | "deaf";
       const frontendRole: UserRole =
         role === "blind" ? "blind-student" : role === "deaf" ? "deaf-student" : "teacher";
+      const fallbackName =
+        frontendRole === "blind-student"
+          ? "Estudiante ciego"
+          : frontendRole === "deaf-student"
+            ? "Estudiante sordo"
+            : "Docente";
+      const displayName = String(event.payload?.displayName ?? "").trim();
       return {
         type: "participant",
         payload: {
           id: String(event.payload?.userId ?? crypto.randomUUID()),
-          name: String(event.payload?.userId ?? "Participante"),
+          clientId: String(event.payload?.userId ?? ""),
+          name: displayName || fallbackName,
+          displayName: displayName || undefined,
           role: frontendRole,
           accessibility: role === "blind" ? "blind" : role === "deaf" ? "deaf" : "none",
           isOnline: true,
@@ -61,7 +70,9 @@ export class ClassroomSocket {
         "caption",
         "sign_gloss",
         "screen_frame",
+        "screen_share_stopped",
         "teacher_audio_chunk",
+        "teacher_speaking",
         "webrtc_ready",
         "webrtc_offer",
         "webrtc_answer",
@@ -70,6 +81,7 @@ export class ClassroomSocket {
         "participant",
         "media",
         "session_end",
+        "class_ended",
       ].includes(event.type)
     ) {
       return event as ClassroomEvent;

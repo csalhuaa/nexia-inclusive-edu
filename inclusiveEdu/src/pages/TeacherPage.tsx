@@ -3,9 +3,7 @@ import { SessionBar } from "@/components/classroom/SessionBar";
 import { PageLoader } from "@/components/classroom/SessionWidgets";
 import { TopNavBar } from "@/components/layout/TopNavBar";
 import { ClassControlsBar } from "@/features/teacher/ClassControlsBar";
-import { InterpreterPanel } from "@/features/teacher/InterpreterPanel";
 import { ParticipantsList } from "@/features/teacher/ParticipantsList";
-import { TeacherCameraPanel } from "@/features/teacher/TeacherCameraPanel";
 import { TeacherWhiteboard } from "@/features/teacher/TeacherWhiteboard";
 import { useSessionGuard } from "@/hooks/useSessionGuard";
 
@@ -21,11 +19,9 @@ export function TeacherPage() {
         <PageLoader label="Preparando aula del docente…" />
       ) : (
         <>
-          <main className="relative flex flex-1 flex-col gap-gutter overflow-hidden bg-surface p-unit md:flex-row">
-            <InterpreterPanel />
+          <main className="relative flex flex-1 flex-col gap-gutter overflow-hidden bg-transparent p-unit md:flex-row">
             <TeacherWhiteboard />
             <aside className="flex w-full shrink-0 flex-col gap-unit md:w-72">
-              <TeacherCameraPanel />
               <ParticipantsList />
             </aside>
           </main>

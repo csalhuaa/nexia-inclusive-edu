@@ -13,18 +13,25 @@ export function Panel({ title, icon, children, className, headerExtra }: PanelPr
   return (
     <section
       className={cn(
-        "flex flex-col rounded-lg border-2 border-outline-variant bg-surface-container-lowest shadow-sm",
+        "edu-glass flex flex-col overflow-hidden rounded-2xl",
         className,
       )}
     >
-      <header className="flex items-center justify-between border-b border-outline-variant bg-surface-container-low px-4 py-2">
+      <header className="flex items-center justify-between border-b border-outline-variant/70 bg-white/55 px-5 py-3">
         <h2 className="flex items-center gap-2 font-headline text-headline-md text-on-surface">
-          {icon && <span className="material-symbols-outlined" aria-hidden="true">{icon}</span>}
+          {icon && (
+            <span
+              className="material-symbols-outlined rounded-xl bg-primary-fixed p-2 text-primary"
+              aria-hidden="true"
+            >
+              {icon}
+            </span>
+          )}
           {title}
         </h2>
         {headerExtra}
       </header>
-      <div className="flex flex-1 flex-col p-unit">{children}</div>
+      <div className="flex flex-1 flex-col p-3">{children}</div>
     </section>
   );
 }

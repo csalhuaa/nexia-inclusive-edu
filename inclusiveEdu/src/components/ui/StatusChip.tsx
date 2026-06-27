@@ -11,9 +11,9 @@ export function StatusChip({ label, className, icon }: StatusChipProps) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-3 py-1",
-        "bg-secondary-container text-on-secondary-container",
-        "text-label-sm font-body",
+        "inline-flex items-center gap-1.5 rounded-full border border-secondary/20 px-3 py-1.5",
+        "bg-secondary-container/80 text-on-secondary-container shadow-sm",
+        "text-label-sm font-body font-semibold",
         className,
       )}
     >

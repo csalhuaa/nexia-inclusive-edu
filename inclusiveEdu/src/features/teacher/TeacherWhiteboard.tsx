@@ -1,9 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useClassroom } from "@/hooks/useClassroom";
 import { StatusChip } from "@/components/ui/StatusChip";
 import { Icon } from "@/components/ui/Icon";
 import { classroomSocket } from "@/lib/ws/classroomSocket";
 import { uploadScreenshot } from "@/lib/api/classroom";
+import { TeacherCameraPanel } from "@/features/teacher/TeacherCameraPanel";
+import { AvatarVideo } from "@/features/deaf-student/components/AvatarVideo";
+import { registerScreenStream } from "@/lib/media/classroomMedia";
 
 function drawScaledFrame(videoElement: HTMLVideoElement) {
   const sourceWidth = videoElement.videoWidth || 1280;
@@ -19,28 +22,73 @@ function drawScaledFrame(videoElement: HTMLVideoElement) {
   return canvas;
 }
 
+function TeacherInterpreterPreview({
+  isSpeaking,
+  status,
+}: {
+  isSpeaking: boolean;
+  status?: string;
+}) {
+  return (
+    <aside className="hidden min-h-0 flex-col rounded-2xl border border-white/10 bg-white/5 p-3 lg:flex">
+      <div className="mb-2 flex items-center justify-between text-white">
+        <span className="font-body text-label-sm font-semibold">Intérprete AI</span>
+        <span className={`text-[11px] ${isSpeaking ? "text-emerald-300" : "text-white/55"}`}>
+          {isSpeaking ? "Activo" : "En espera"}
+        </span>
+      </div>
+      <AvatarVideo isSpeaking={isSpeaking} compact className="h-auto" />
+      <p className="mt-3 font-body text-[11px] leading-relaxed text-white/60">
+        Vista previa compacta del intérprete que ven los estudiantes sordos.
+      </p>
+      {status && <StatusChip label={status} className="mt-auto justify-center" />}
+    </aside>
+  );
+}
+
 export function TeacherWhiteboard() {
-  const { session, nextSlide, prevSlide, toggleMedia } = useClassroom();
+  const { session, toggleMedia, teacherIsSpeaking } = useClassroom();
   const screenVideoRef = useRef<HTMLVideoElement | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const uploadInFlightRef = useRef(false);
   const lastScreenSampleRef = useRef<Uint8ClampedArray | null>(null);
   const lastScreenUploadAtRef = useRef(0);
+  const lastPreviewFrameAtRef = useRef(0);
   const rateLimitUntilRef = useRef(0);
   const firstScreenUploadPendingRef = useRef(false);
+  const screenWasActiveRef = useRef(false);
   const [screenStatus, setScreenStatus] = useState("Listo para compartir pantalla");
+  const [activeTab, setActiveTab] = useState<"screen" | "board">("screen");
 
   const screenShare = session?.media.screenShare ?? false;
   const sessionId = session?.id;
 
+  const publishScreenShareStopped = useCallback(() => {
+    if (!screenWasActiveRef.current && !screenStreamRef.current) return;
+
+    screenWasActiveRef.current = false;
+    screenStreamRef.current?.getTracks().forEach((track) => track.stop());
+    screenStreamRef.current = null;
+    registerScreenStream(null);
+    lastScreenSampleRef.current = null;
+    firstScreenUploadPendingRef.current = false;
+    rateLimitUntilRef.current = 0;
+    lastPreviewFrameAtRef.current = 0;
+    uploadInFlightRef.current = false;
+    if (screenVideoRef.current) {
+      screenVideoRef.current.srcObject = null;
+    }
+    setScreenStatus("Listo para compartir pantalla");
+    classroomSocket.send({ type: "screen_share_stopped" });
+    classroomSocket.send({
+      type: "screen_frame",
+      payload: { data: "", width: 0, height: 0 },
+    });
+  }, []);
+
   useEffect(() => {
     if (!screenShare) {
-      screenStreamRef.current?.getTracks().forEach((track) => track.stop());
-        screenStreamRef.current = null;
-        lastScreenSampleRef.current = null;
-        firstScreenUploadPendingRef.current = false;
-        rateLimitUntilRef.current = 0;
-        setScreenStatus("Listo para compartir pantalla");
+      publishScreenShareStopped();
       return;
     }
 
@@ -61,6 +109,8 @@ export function TeacherWhiteboard() {
 
         screenStreamRef.current?.getTracks().forEach((track) => track.stop());
         screenStreamRef.current = stream;
+        registerScreenStream(stream);
+        screenWasActiveRef.current = true;
 
         if (screenVideoRef.current) {
           screenVideoRef.current.srcObject = stream;
@@ -68,6 +118,7 @@ export function TeacherWhiteboard() {
         }
 
         stream.getVideoTracks()[0]?.addEventListener("ended", () => {
+          publishScreenShareStopped();
           if (screenShare) toggleMedia("screenShare");
         });
 
@@ -83,7 +134,7 @@ export function TeacherWhiteboard() {
     return () => {
       cancelled = true;
     };
-  }, [screenShare, toggleMedia]);
+  }, [publishScreenShareStopped, screenShare, toggleMedia]);
 
   useEffect(() => {
     if (!screenShare || session?.connectionMode !== "api" || !sessionId) return;
@@ -115,14 +166,50 @@ export function TeacherWhiteboard() {
       return changedPixels / (sample.length / 4) > 0.05;
     }
 
+    function publishPreviewFrame(videoElement: HTMLVideoElement, sourceCanvas: HTMLCanvasElement) {
+      const now = Date.now();
+      if (now - lastPreviewFrameAtRef.current < 1000) return;
+      lastPreviewFrameAtRef.current = now;
+
+      const previewCanvas = document.createElement("canvas");
+      const maxFrameWidth = 960;
+      const scale = Math.min(1, maxFrameWidth / sourceCanvas.width);
+      previewCanvas.width = Math.round(sourceCanvas.width * scale);
+      previewCanvas.height = Math.round(sourceCanvas.height * scale);
+      const previewCtx = previewCanvas.getContext("2d");
+      if (!previewCtx) return;
+      previewCtx.drawImage(videoElement, 0, 0, previewCanvas.width, previewCanvas.height);
+      previewCanvas.toBlob((sendBlob) => {
+        if (sendBlob) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            classroomSocket.send({
+              type: "screen_frame",
+              payload: {
+                data: reader.result as string,
+                width: previewCanvas.width,
+                height: previewCanvas.height,
+              },
+            });
+          };
+          reader.readAsDataURL(sendBlob);
+        }
+      }, "image/jpeg", 0.72);
+    }
+
     async function captureAndUploadScreen() {
-      if (uploadInFlightRef.current || !screenVideoRef.current) return;
+      if (!screenVideoRef.current) return;
+      const videoElement = screenVideoRef.current;
+      if (videoElement.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
+      const canvas = drawScaledFrame(videoElement);
+      if (!canvas) return;
+      publishPreviewFrame(videoElement, canvas);
+
+      if (uploadInFlightRef.current) return;
       if (Date.now() < rateLimitUntilRef.current) {
         setScreenStatus("Visión en espera por límite de API");
         return;
       }
-      const videoElement = screenVideoRef.current;
-      if (videoElement.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
       const forceFirstUpload = firstScreenUploadPendingRef.current;
       if (!forceFirstUpload && !hasMeaningfulScreenChange(videoElement)) {
         setScreenStatus("Pantalla sin cambios relevantes");
@@ -136,34 +223,10 @@ export function TeacherWhiteboard() {
         return;
       }
 
-      const canvas = drawScaledFrame(videoElement);
-      if (!canvas) return;
       const blob = await new Promise<Blob | null>((resolve) =>
         canvas.toBlob(resolve, "image/jpeg", 0.82),
       );
       if (!blob) return;
-
-      const sendCanvas = document.createElement("canvas");
-      const maxFrameWidth = 640;
-      const scale = Math.min(1, maxFrameWidth / canvas.width);
-      sendCanvas.width = Math.round(canvas.width * scale);
-      sendCanvas.height = Math.round(canvas.height * scale);
-      const sendCtx = sendCanvas.getContext("2d");
-      if (sendCtx) {
-        sendCtx.drawImage(canvas, 0, 0, sendCanvas.width, sendCanvas.height);
-        sendCanvas.toBlob((sendBlob) => {
-          if (sendBlob) {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-              classroomSocket.send({
-                type: "screen_frame",
-                payload: { data: reader.result as string, width: sendCanvas.width, height: sendCanvas.height },
-              });
-            };
-            reader.readAsDataURL(sendBlob);
-          }
-        }, "image/jpeg", 0.55);
-      }
 
       uploadInFlightRef.current = true;
       lastScreenUploadAtRef.current = now;
@@ -201,85 +264,79 @@ export function TeacherWhiteboard() {
 
   if (!session) return null;
 
-  const slide = session.slides[session.slideIndex];
-  const total = session.slides.length;
-  const hasSlides = total > 0;
-
   return (
-    <section className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border-2 border-outline-variant bg-surface-container-lowest shadow-sm">
-      <header className="flex items-center justify-between border-b border-outline-variant bg-surface-container-low px-4 py-3">
-        <h2 className="flex items-center gap-2 font-headline text-headline-md text-on-surface">
-          <Icon name={screenShare ? "screen_share" : "co_present"} />
-          {screenShare ? "Pantalla compartida" : "Contenido principal"}
-        </h2>
+    <section className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-outline-variant bg-white/90 shadow-[0_18px_48px_rgba(18,32,51,0.08)]">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-outline-variant/70 bg-white/75 px-4 py-3 backdrop-blur-xl">
+        <div className="flex rounded-full border border-outline-variant bg-surface-container-low p-1">
+          {[
+            { key: "screen" as const, label: "Pantalla compartida", icon: "screen_share" },
+            { key: "board" as const, label: "Pizarra / Cámara", icon: "photo_camera" },
+          ].map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setActiveTab(tab.key)}
+              aria-pressed={activeTab === tab.key}
+              className={`flex items-center gap-2 rounded-full px-4 py-2 font-body text-label-sm font-semibold transition-colors ${
+                activeTab === tab.key
+                  ? "bg-primary text-on-primary shadow-sm"
+                  : "text-on-surface-variant hover:bg-white hover:text-primary"
+              }`}
+            >
+              <Icon name={tab.icon} size={18} />
+              {tab.label}
+            </button>
+          ))}
+        </div>
         <div className="flex items-center gap-2">
-          {hasSlides && !screenShare ? (
-            <>
-              <button
-                type="button"
-                aria-label="Diapositiva anterior"
-                disabled={session.slideIndex === 0}
-                onClick={prevSlide}
-                className="rounded-lg p-2 text-on-surface-variant transition-colors hover:bg-surface-variant disabled:opacity-40"
-              >
-                <Icon name="chevron_left" />
-              </button>
-              <StatusChip label={`Página ${session.slideIndex + 1}/${total}`} />
-              <button
-                type="button"
-                aria-label="Diapositiva siguiente"
-                disabled={session.slideIndex >= total - 1}
-                onClick={nextSlide}
-                className="rounded-lg p-2 text-on-surface-variant transition-colors hover:bg-surface-variant disabled:opacity-40"
-              >
-                <Icon name="chevron_right" />
-              </button>
-            </>
-          ) : (
-            <StatusChip label={screenStatus} />
-          )}
+          {screenShare && <StatusChip label="Compartiendo pantalla" />}
+          {session.media.boardCamera && <StatusChip label="Cámara activa" />}
+          {teacherIsSpeaking && <StatusChip label="Docente hablando" />}
         </div>
       </header>
 
       <div className="relative flex-1 overflow-hidden bg-[#111318] p-4">
-        {screenShare ? (
-          <div className="flex h-full min-h-[320px] items-center justify-center rounded-xl border border-outline-variant bg-black">
-            <video
-              ref={screenVideoRef}
-              autoPlay
-              muted
-              playsInline
-              className="h-full max-h-full w-full object-contain"
-            />
-          </div>
-        ) : slide?.imageUrl ? (
-          <div className="flex h-full flex-col gap-4">
-            <h3 className="font-headline text-headline-lg text-on-background">{slide.topic}</h3>
-            <img
-              src={slide.imageUrl}
-              alt={slide.body}
-              className="mx-auto max-h-[420px] w-full max-w-3xl rounded-lg object-contain"
-            />
-            <p className="text-center font-body text-body-md text-on-surface-variant">{slide.body}</p>
-          </div>
-        ) : slide ? (
-          <div className="relative mx-auto flex h-full min-h-[280px] max-w-3xl flex-col rounded-xl border border-dashed border-outline-variant/50 bg-white p-8">
-            <h3 className="mb-8 font-headline text-headline-lg text-on-background">{slide.topic}</h3>
-            <div className="my-auto text-center font-display text-display text-primary">
-              {slide.expression ?? slide.body}
+        {activeTab === "screen" ? (
+          <div className="grid h-full gap-4 lg:grid-cols-[minmax(0,1fr)_240px]">
+            <div className="flex h-full min-h-[360px] items-center justify-center rounded-2xl border border-outline-variant bg-black">
+              {screenShare ? (
+                <video
+                  ref={screenVideoRef}
+                  autoPlay
+                  muted
+                  playsInline
+                  className="h-full max-h-full w-full object-contain"
+                />
+              ) : (
+                <div className="flex flex-col items-center gap-4 text-center text-inverse-on-surface/70">
+                  <Icon name="screen_share" size={56} />
+                  <div>
+                    <p className="font-headline text-headline-md text-inverse-on-surface">
+                      Pantalla compartida
+                    </p>
+                    <p className="mt-2 max-w-md font-body text-body-md">
+                      Comparte una pestaña, ventana o pantalla para que el sistema describa el contenido.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => toggleMedia("screenShare")}
+                    className="rounded-full bg-primary px-5 py-3 font-body text-label-lg font-semibold text-on-primary shadow-lg transition-colors hover:bg-primary/90"
+                  >
+                    Compartir pantalla
+                  </button>
+                </div>
+              )}
             </div>
+            <TeacherInterpreterPreview isSpeaking={teacherIsSpeaking} status={screenStatus} />
           </div>
         ) : (
-          <div className="flex h-full min-h-[320px] flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed border-outline-variant bg-surface-container-lowest p-8 text-center">
-            <Icon name="screen_share" size={56} className="text-primary" />
-            <div>
-              <p className="font-headline text-headline-md text-on-surface">
-                Comparte una pantalla o activa la cámara de pizarra
-              </p>
-              <p className="mt-2 max-w-xl font-body text-body-md text-on-surface-variant">
-                En clase virtual, usa Compartir Pantalla. En presencial, usa el modo Pizarra para enfocar el tablero físico.
-              </p>
-            </div>
+          <div className="grid h-full gap-4 lg:grid-cols-[minmax(0,1fr)_240px]">
+            <TeacherCameraPanel large />
+            <TeacherInterpreterPreview
+              isSpeaking={teacherIsSpeaking}
+              status={session.media.boardCamera ? "Cámara activa" : "Cámara lista"}
+            />
           </div>
         )}
       </div>

@@ -3,9 +3,9 @@ import { cn } from "@/lib/cn";
 import { Icon } from "./Icon";
 
 const toastStyles = {
-  info: "border-primary/30 bg-surface-container-lowest text-on-surface",
-  success: "border-secondary/40 bg-secondary-container/30 text-on-secondary-container",
-  error: "border-error/40 bg-error-container text-on-error-container",
+  info: "border-primary/25 bg-white/90 text-on-surface",
+  success: "border-secondary/30 bg-secondary-container/90 text-on-secondary-container",
+  error: "border-error/35 bg-error-container/95 text-on-error-container",
 } as const;
 
 const toastIcons = {
@@ -22,14 +22,14 @@ export function ToastContainer() {
   return (
     <div
       aria-live="polite"
-      className="pointer-events-none fixed bottom-6 right-6 z-[100] flex w-full max-w-sm flex-col gap-3"
+      className="pointer-events-none fixed bottom-6 right-6 z-[100] flex w-full max-w-sm flex-col gap-3 px-4 sm:px-0"
     >
       {toasts.map((toast) => (
         <div
           key={toast.id}
           role="status"
           className={cn(
-            "pointer-events-auto flex items-start gap-3 rounded-xl border-2 p-4 shadow-lg backdrop-blur-sm",
+            "pointer-events-auto flex items-start gap-3 rounded-2xl border p-4 shadow-[0_18px_46px_rgba(18,32,51,0.16)] backdrop-blur-xl",
             toastStyles[toast.type],
           )}
         >

@@ -11,15 +11,15 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 
 const variantStyles: Record<ButtonVariant, string> = {
   primary:
-    "bg-primary text-on-primary hover:bg-primary/90 focus-visible:ring-primary",
+    "bg-primary text-on-primary shadow-[0_12px_28px_rgba(37,72,199,0.22)] hover:bg-primary/90 hover:shadow-[0_16px_34px_rgba(37,72,199,0.28)] focus-visible:ring-primary",
   secondary:
-    "bg-secondary text-on-secondary hover:bg-secondary/90 focus-visible:ring-secondary",
+    "bg-secondary text-on-secondary shadow-[0_12px_28px_rgba(0,140,138,0.2)] hover:bg-secondary/90 hover:shadow-[0_16px_34px_rgba(0,140,138,0.26)] focus-visible:ring-secondary",
   outline:
-    "bg-transparent border-2 border-primary text-primary hover:bg-primary/5 focus-visible:ring-primary",
+    "border border-primary/35 bg-primary/5 text-primary shadow-sm hover:border-primary/55 hover:bg-primary/10 focus-visible:ring-primary",
   danger:
-    "bg-error text-on-error hover:bg-on-error-container focus-visible:ring-error font-bold shadow-sm",
+    "bg-error text-on-error shadow-[0_12px_28px_rgba(180,35,24,0.2)] hover:bg-error/90 focus-visible:ring-error font-bold",
   ghost:
-    "bg-surface text-on-surface border border-outline-variant hover:bg-surface-variant focus-visible:ring-primary",
+    "border border-outline-variant bg-white/70 text-on-surface shadow-sm hover:bg-surface-variant focus-visible:ring-primary",
 };
 
 export function Button({
@@ -34,9 +34,10 @@ export function Button({
     <button
       type={type}
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-lg px-8 py-4",
-        "text-label-lg font-body transition-colors",
+        "inline-flex items-center justify-center gap-2 rounded-xl px-7 py-3.5",
+        "text-label-lg font-body transition-all duration-200",
         "min-h-touch-target-min focus-visible:ring-3 focus-visible:ring-offset-2",
+        "disabled:cursor-not-allowed disabled:opacity-55",
         variantStyles[variant],
         fullWidth && "w-full",
         className,

@@ -1,11 +1,11 @@
-import { IMAGES } from "@/constants/assets";
 import { useClassroom } from "@/hooks/useClassroom";
 import { Icon } from "@/components/ui/Icon";
 import { cn } from "@/lib/cn";
+import { AvatarVideo } from "@/features/deaf-student/components/AvatarVideo";
 
 export function InterpreterPanel() {
-  const { session } = useClassroom();
-  const isActive = session?.interpreterActive ?? false;
+  const { session, teacherIsSpeaking } = useClassroom();
+  const isActive = teacherIsSpeaking || (session?.interpreterActive ?? false);
 
   return (
     <aside className="absolute bottom-4 left-4 z-30 w-[min(42vw,220px)] min-w-[150px]">
@@ -16,11 +16,7 @@ export function InterpreterPanel() {
         </h2>
 
         <div className="relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-lg border border-outline bg-inverse-surface">
-          <img
-            src={IMAGES.interpreterAvatar}
-            alt="Intérprete de lengua de señas generado por IA sobre fondo oscuro de alto contraste"
-            className="absolute inset-0 h-full w-full object-cover opacity-90 mix-blend-luminosity"
-          />
+          <AvatarVideo isSpeaking={isActive} compact className="rounded-none shadow-none" />
           {isActive && (
             <div className="absolute bottom-2 left-2 flex items-center gap-1 rounded-lg bg-on-background/70 px-2 py-1 text-sm text-on-primary backdrop-blur-sm">
               <span className="h-2 w-2 animate-pulse rounded-full bg-secondary-fixed" aria-hidden="true" />

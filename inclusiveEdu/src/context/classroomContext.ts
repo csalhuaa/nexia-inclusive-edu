@@ -14,6 +14,8 @@ export type ClassroomContextValue = {
   createSession: (title?: string) => Promise<void>;
   joinSession: (code: string, role: UserRole, displayName?: string) => Promise<boolean>;
   endSession: () => void;
+  leaveClassroom: () => void;
+  endClassroom: () => void;
   toggleMedia: (key: keyof MediaState) => void;
   nextSlide: () => void;
   prevSlide: () => void;
@@ -23,6 +25,7 @@ export type ClassroomContextValue = {
   speakCaption: () => void;
   enableTeacherAudio: () => void;
   teacherAudioBlocked: boolean;
+  teacherIsSpeaking: boolean;
   latestSignGloss: SignGlossPayload | null;
   setSignGloss: (payload: SignGlossPayload) => void;
   downloadSummary: () => void;

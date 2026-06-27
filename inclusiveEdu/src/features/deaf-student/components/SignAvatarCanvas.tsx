@@ -1,6 +1,6 @@
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, Environment } from "@react-three/drei";
-import { SignAvatar } from "@/features/deaf-student/components/SignAvatar";
+import { CartoonSignAvatar } from "@/features/deaf-student/components/CartoonSignAvatar";
 
 type SignAvatarCanvasProps = {
   currentGloss: string | null;
@@ -8,14 +8,22 @@ type SignAvatarCanvasProps = {
 
 export function SignAvatarCanvas({ currentGloss }: SignAvatarCanvasProps) {
   return (
-    <Canvas camera={{ position: [0, 1.2, 4.2], fov: 42 }} className="h-full w-full">
+    <Canvas camera={{ position: [0, 0.85, 4.2], fov: 36 }} className="h-full w-full">
       <color attach="background" args={["#0f172a"]} />
-      <ambientLight intensity={0.8} />
-      <directionalLight position={[2.5, 4, 3]} intensity={1.6} />
-      <pointLight position={[-2, 2, 2]} intensity={0.7} color="#67e8f9" />
-      <SignAvatar currentGloss={currentGloss} />
+      <ambientLight intensity={1.05} />
+      <directionalLight position={[2.4, 4.4, 3.2]} intensity={1.45} />
+      <directionalLight position={[-2.8, 2.2, 2.6]} intensity={0.55} color="#bae6fd" />
+      <spotLight position={[0, 3.4, 3.2]} angle={0.42} penumbra={0.75} intensity={0.65} />
+      <CartoonSignAvatar currentGloss={currentGloss} />
       <Environment preset="city" />
-      <OrbitControls enablePan={false} enableZoom={false} minPolarAngle={1.15} maxPolarAngle={1.8} />
+      <OrbitControls
+        target={[0, 0.55, 0]}
+        enablePan={false}
+        enableZoom={false}
+        enableRotate={false}
+        minPolarAngle={1.05}
+        maxPolarAngle={1.75}
+      />
     </Canvas>
   );
 }

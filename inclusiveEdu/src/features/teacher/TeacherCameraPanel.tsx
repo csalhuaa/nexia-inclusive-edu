@@ -4,8 +4,13 @@ import { useClassroom } from "@/hooks/useClassroom";
 import { Icon } from "@/components/ui/Icon";
 import { classroomSocket } from "@/lib/ws/classroomSocket";
 import { uploadScreenshot } from "@/lib/api/classroom";
+import { registerCameraStream } from "@/lib/media/classroomMedia";
 
-export function TeacherCameraPanel() {
+type TeacherCameraPanelProps = {
+  large?: boolean;
+};
+
+export function TeacherCameraPanel({ large = false }: TeacherCameraPanelProps) {
   const { session, toggleMedia, toggleBoardCamera } = useClassroom();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -27,6 +32,7 @@ export function TeacherCameraPanel() {
     if (!shouldUseCamera) {
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
+      registerCameraStream(null);
       setCameraError(false);
       return;
     }
@@ -45,6 +51,7 @@ export function TeacherCameraPanel() {
         }
         streamRef.current?.getTracks().forEach((track) => track.stop());
         streamRef.current = stream;
+        registerCameraStream(stream);
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }
@@ -160,13 +167,17 @@ export function TeacherCameraPanel() {
   if (!session) return null;
 
   return (
-    <div className="flex flex-col rounded-xl border-2 border-outline-variant bg-surface-container-lowest p-unit shadow-sm">
+    <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-outline-variant bg-white/90 p-3 shadow-[0_18px_48px_rgba(18,32,51,0.08)]">
       <h2 className="mb-unit flex items-center gap-2 font-body text-label-lg text-on-surface">
         <Icon name={boardCamera ? "photo_camera" : "video_camera_front"} />
         {screenShare ? "Pantalla Compartida" : boardCamera ? "Cámara de Pizarra" : "Cámara Docente"}
       </h2>
 
-      <div className="relative mb-4 flex aspect-video w-full items-center justify-center overflow-hidden rounded-xl border border-outline bg-inverse-surface">
+      <div
+        className={`relative mb-4 flex w-full items-center justify-center overflow-hidden rounded-2xl border border-outline bg-inverse-surface ${
+          large ? "min-h-[460px] flex-1" : "aspect-video"
+        }`}
+      >
         {screenShare ? (
           <div className="flex flex-col items-center gap-2 text-inverse-on-surface/70">
             <Icon name="screen_share" size={40} />
@@ -201,7 +212,7 @@ export function TeacherCameraPanel() {
             </div>
           </>
         )}
-        <div className="absolute bottom-2 right-2 flex gap-2">
+        <div className="absolute bottom-2 left-2 flex gap-2">
           <button
             type="button"
             aria-label={audio ? "Silenciar micrófono" : "Activar micrófono"}

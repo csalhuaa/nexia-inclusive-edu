@@ -10,10 +10,13 @@ export type ParticipantAccessibility = "deaf" | "blind" | "none";
 
 export type Participant = {
   id: string;
+  clientId?: string;
   name: string;
+  displayName?: string;
   role: UserRole;
   accessibility?: ParticipantAccessibility;
   isOnline: boolean;
+  lastSeenAt?: number;
 };
 
 export type SlideContent = {
@@ -60,6 +63,7 @@ export type JoinClassroomPayload = {
   code: string;
   role: UserRole;
   displayName?: string;
+  clientId?: string;
 };
 
 export type CreateClassroomPayload = {
@@ -78,7 +82,9 @@ export type ClassroomEvent =
   | { type: "caption"; payload: string }
   | { type: "sign_gloss"; payload: SignGlossPayload }
   | { type: "screen_frame"; payload: ScreenFramePayload }
+  | { type: "screen_share_stopped" }
   | { type: "teacher_audio_chunk"; payload: { data: string; mimeType: string } }
+  | { type: "teacher_speaking"; payload: { active: boolean } }
   | { type: "webrtc_ready"; payload: { from: string } }
   | { type: "webrtc_offer"; payload: { from: string; target: string; description: RTCSessionDescriptionInit } }
   | { type: "webrtc_answer"; payload: { from: string; target: string; description: RTCSessionDescriptionInit } }
@@ -86,4 +92,5 @@ export type ClassroomEvent =
   | { type: "slide"; payload: number }
   | { type: "participant"; payload: Participant }
   | { type: "media"; payload: MediaState }
-  | { type: "session_end" };
+  | { type: "session_end" }
+  | { type: "class_ended" };

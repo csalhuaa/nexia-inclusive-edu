@@ -17,7 +17,7 @@ export function AppLayout({
   return (
     <div
       className={cn(
-        "flex flex-col bg-background text-on-background",
+        "relative flex flex-col bg-transparent text-on-background",
         fullHeight ? "h-screen" : "min-h-screen",
         overflowHidden && "overflow-hidden",
         className,
