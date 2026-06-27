@@ -20,7 +20,13 @@ class GroqSTTProvider(STTProvider):
                 f"{self._base_url}/audio/transcriptions",
                 headers={"Authorization": f"Bearer {self._api_key}"},
                 files={"file": (filename, audio_data, content_type)},
-                data={"model": self._model, "response_format": "json"},
+                data={
+                    "model": self._model,
+                    "response_format": "json",
+                    "language": "es",
+                    "temperature": "0.0",
+                    "prompt": "Esta es una clase en español. Ignora el silencio y ruido de fondo. No traduzcas.",
+                },
                 timeout=60,
             )
             response.raise_for_status()

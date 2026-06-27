@@ -22,20 +22,23 @@ async def ingest_screenshot(
             classroom_id, image_data, force=force
         )
     except VisionRateLimitError:
-        explanation = (
-            "La pantalla compartida cambió, pero el servicio de visión está limitado "
-            "temporalmente. Se reintentará en unos segundos."
-        )
+        explanation = {
+            "summary": "La pantalla compartida cambió, pero el servicio de visión está limitado temporalmente.",
+            "full_text": ""
+        }
         await container.realtime_publisher.publish(
             classroom_id,
             EventEnvelope(
                 type="screenshot.processed",
                 classroom_id=classroom_id,
                 timestamp=now_utc(),
-                payload={"explanation": explanation},
+                payload={
+                    "explanation": explanation["summary"],
+                    "full_text": explanation["full_text"]
+                },
             ),
         )
-        return {"explanation": explanation, "duplicate": False, "rateLimited": True}
+        return {"explanation": explanation["summary"], "full_text": explanation["full_text"], "duplicate": False, "rateLimited": True}
     if explanation is None:
-        return {"explanation": None, "duplicate": True, "rateLimited": False}
-    return {"explanation": explanation, "duplicate": False, "rateLimited": False}
+        return {"explanation": None, "full_text": None, "duplicate": True, "rateLimited": False}
+    return {"explanation": explanation["summary"], "full_text": explanation["full_text"], "duplicate": False, "rateLimited": False}

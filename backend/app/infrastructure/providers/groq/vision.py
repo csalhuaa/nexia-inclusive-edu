@@ -16,7 +16,7 @@ class GroqVisionProvider(VisionProvider):
         self._base_url = base_url
         self._model = model
 
-    async def explain_screenshot(self, image_data: bytes) -> str:
+    async def explain_screenshot(self, image_data: bytes) -> dict[str, str]:
         if not self._api_key:
             raise ValueError("GROQ_API_KEY not configured")
 
@@ -51,21 +51,20 @@ class GroqVisionProvider(VisionProvider):
                                 {
                                     "type": "text",
                                     "text": (
-                                        "Describe para un estudiante ciego lo más relevante que se ve ahora. "
-                                        "Si hay una diapositiva, pizarra, pantalla, texto, fórmula o gráfico, "
-                                        "explica su contenido principal. Si no hay material de clase claro, "
-                                        "describe brevemente la escena visible y di que no identificas contenido "
-                                        "educativo. Usa máximo 2 oraciones breves."
+                                        "Describe para un estudiante ciego lo que se ve en la imagen. "
+                                        "Primero, escribe un breve resumen de máximo 2 oraciones. "
+                                        "Luego, escribe exactamente la etiqueta 'TEXTO COMPLETO:' y debajo transcribe todo el texto visible en la diapositiva o pizarra. "
+                                        "Si no hay material educativo claro, escribe el resumen y deja la transcripción vacía."
                                     ),
                                 },
                                 {
                                     "type": "image_url",
                                     "image_url": {"url": data_url},
-                                },
+                                }
                             ],
                         }
                     ],
-                    "max_tokens": 120,
+                    "max_tokens": 800,
                     "temperature": 0.2,
                 },
                 timeout=30,
@@ -78,7 +77,7 @@ class GroqVisionProvider(VisionProvider):
             return self._clean_response(content)
 
     @staticmethod
-    def _clean_response(content: str) -> str:
+    def _clean_response(content: str) -> dict[str, str]:
         cleaned = re.sub(
             r"<think>.*?</think>",
             "",
@@ -86,19 +85,26 @@ class GroqVisionProvider(VisionProvider):
             flags=re.DOTALL | re.IGNORECASE,
         )
         cleaned = re.sub(r"<think>.*", "", cleaned, flags=re.DOTALL | re.IGNORECASE)
-        cleaned = re.sub(r"<[^>]+>", " ", cleaned)
-        cleaned = re.sub(
-            r"\b(the user|the prompt|the image|the instruction|analysis|reasoning)\b.*",
-            "",
-            cleaned,
-            flags=re.IGNORECASE | re.DOTALL,
-        )
-        cleaned = re.sub(
-            r"\b(el usuario|el prompt|la instrucción|razonamiento interno)\b.*",
-            "",
-            cleaned,
-            flags=re.IGNORECASE | re.DOTALL,
-        )
-        cleaned = re.sub(r"[`*_#>{}\[\]|~^]", " ", cleaned)
-        cleaned = re.sub(r"\s+", " ", cleaned).strip()
-        return cleaned or "No se distingue contenido educativo en la pizarra."
+        
+        parts = re.split(r"[-*]*\s*TEXTO[\s_]*COMPLETO\s*[-*:]*\s*", cleaned, flags=re.IGNORECASE)
+        summary_part = parts[0]
+        full_text_part = parts[1] if len(parts) > 1 else ""
+
+        def clean_part(text: str) -> str:
+            t = re.sub(r"<[^>]+>", " ", text)
+            t = re.sub(
+                r"^(the user|the prompt|the image|the instruction|analysis|reasoning|el usuario|el prompt|la instrucción|razonamiento interno)\s*:\s*",
+                "",
+                t,
+                flags=re.IGNORECASE,
+            )
+            t = re.sub(r"[`*_#>{}\[\]|~^]", " ", t)
+            return re.sub(r"\s+", " ", t).strip()
+
+        summary = clean_part(summary_part)
+        full_text = clean_part(full_text_part)
+
+        return {
+            "summary": summary or "No se distingue contenido educativo en la pizarra.",
+            "full_text": full_text
+        }
